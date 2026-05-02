@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-	use engine::{Config, SearchEngine, IndexBuilder};
+	use engine::{ActionHandler, Config, IndexBuilder, SearchEngine, create_special_item};
 
 	#[test]
 	fn test_search() {
@@ -27,6 +27,28 @@ mod tests {
 		println!("Indexed {} items", items.len());
 		for item in items.iter().take(10) {
 		println!("* {} ({:?})", item.title, item.item_type);
+		}
+	}
+
+	#[test]
+	fn test_actions() {
+	    let config = Config::load();
+		let builder = IndexBuilder::new(config.expect("Should load Pre-Configuration"));
+		let items = builder.build().unwrap();
+
+		let mut engine = SearchEngine::new();
+		engine.set_items(items);
+
+		let results = engine.search("code");
+		println!("Found {} results", results.len());
+
+		if let Some(top) = results.first() {
+    		println!("Executing: {}", top.item.title);
+    		ActionHandler::execute(&top.item);
+		}
+
+		if let Some(special) = create_special_item("https://github.com") {
+            ActionHandler::execute(&special);
 		}
 	}
 }

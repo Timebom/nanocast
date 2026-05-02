@@ -8,3 +8,4 @@ pub use config::Config;
 pub use models::*;
 pub use search::SearchEngine;
 pub use index::IndexBuilder;
+pub use actions::{ActionHandler, create_special_item};

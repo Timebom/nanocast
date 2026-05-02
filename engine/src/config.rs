@@ -34,13 +34,22 @@ impl Default for Config {
                 index_folders: false,
                 applications_paths: vec![
                     "/Applications".to_string(),
-                    "~/Applications".to_string()
+                    "~/Applications".to_string(),
+                    "/usr/bin".to_string(),
+                    "/usr/local/bin".to_string()
                 ],
                 file_paths: vec![
                     "~/Downloads".to_string(),
-                    "~/Documents".to_string()
+                    "~/Documents".to_string(),
+                    "~/Pictures".to_string(),
+                    "~/Music".to_string()
                 ],
                 ignored_patterns: vec![
+                    "/sys".to_string(),
+                    "/tmp".to_string(),
+                    "/sbin".to_string(),
+                    "/proc".to_string(),
+                    "/boot".to_string(),
                     ".git".to_string(),
                     "node_modules".to_string()
                 ]

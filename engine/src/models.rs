@@ -18,6 +18,7 @@ pub enum ItemType {
     Folder,
     Command,
     Script,
+    Url,
 }
 
 #[derive(Clone, Debug)]

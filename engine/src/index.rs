@@ -114,9 +114,9 @@ impl IndexBuilder {
         let mut items = vec![
             LauncherItem {
                 id: "1".into(),
-                title: "Visual Studio Code".into(),
+                title: "Zed".into(),
                 subtitle: Some("Code Editor".into()),
-                path: Some("/local/bin/code".into()),
+                path: Some("/usr/bin/zed".into()),
                 icon_path: None,
                 item_type: ItemType::Application,
                 tags: vec!["code".into(), "editor".into()],
@@ -125,7 +125,7 @@ impl IndexBuilder {
                 id: "2".into(),
                 title: "Firefox".into(),
                 subtitle: Some("Web Browser".into()),
-                path: Some("/opt/Firefox/firefox".into()),
+                path: Some("/opt/firefox/firefox".into()),
                 icon_path: None,
                 item_type: ItemType::Application,
                 tags: vec!["browser".into()],
