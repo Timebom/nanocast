@@ -12,6 +12,8 @@ use iced::{
     Element,
     Color,
     Theme,
+    Subscription,
+    keyboard
 };
 use engine::{
     ActionHandler,
@@ -31,6 +33,7 @@ enum Message {
     SelectDown,
     Execute,
     Hide,
+    Ignored,
     WindowClosed,
 }
 
@@ -81,8 +84,9 @@ impl Launcher {
             }
             Message::Execute => {
                 if let Some(result) = self.results.get(self.selected) {
+                    println!("Executing: {}", result.item.title);
                     if let Err(e) = ActionHandler::execute(&result.item) {
-                        eprintln!("Action error: {}", e);
+                        eprintln!("Action Execution error: {}", e);
                     }
                 }
                 return iced::Task::done(Message::Hide);
@@ -91,7 +95,9 @@ impl Launcher {
                 self.is_visible = false;
                 self.query.clear();
                 self.update_results();
+                self.selected = 0;
             }
+            Message::Ignored => {}
         }
         iced::Task::none()
     }
@@ -192,6 +198,23 @@ impl Launcher {
         })
         .into()
     }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        keyboard::listen().map(|event| {
+            match event {
+                keyboard::Event::KeyPressed { key, .. } => {
+                    match key {
+                        keyboard::Key::Named(keyboard::key::Named::ArrowDown) => Message::SelectDown,
+                        keyboard::Key::Named(keyboard::key::Named::ArrowUp) => Message::SelectUp,
+                        keyboard::Key::Named(keyboard::key::Named::Enter) => Message::Execute,
+                        keyboard::Key::Named(keyboard::key::Named::Escape) => Message::Hide,
+                        _ => Message::Ignored,
+                    }
+                }
+                _ => Message::Ignored,
+            }
+        })
+    }
 }
 
 // fn launcher_theme(_state: &Launcher) -> Theme {
@@ -204,6 +227,7 @@ fn main() -> iced::Result {
     iced::application(Launcher::new, Launcher::update, Launcher::view)
         .title("Nanocast")
         // .theme(launcher_theme)
+        .subscription(Launcher::subscription)
         .window(iced::window::Settings {
             size: iced::Size::new(700.0, 500.0),
             decorations: false,
