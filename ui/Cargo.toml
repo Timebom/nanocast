@@ -2,6 +2,11 @@
 name = "ui"
 version = "0.1.0"
 edition = "2024"
+authors = ["Shvet Saravade"]
 
 [dependencies]
 engine = { path = "../engine" }
+iced = { version = "0.14", features = ["wgpu", "tokio"] }
+anyhow = { workspace = true }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
