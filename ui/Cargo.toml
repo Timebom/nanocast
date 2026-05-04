@@ -5,6 +5,7 @@ edition = "2024"
 authors = ["Shvet Saravade"]
 
 [dependencies]
+global-hotkey = "0.8.0"
 engine = { path = "../engine" }
 iced = { version = "0.14", features = ["wgpu", "tokio"] }
 anyhow = { workspace = true }

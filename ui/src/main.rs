@@ -1,4 +1,8 @@
 use iced::{
+    keyboard::{
+        self,
+        Key
+    },
     widget::{
         row,
         column,
@@ -13,7 +17,6 @@ use iced::{
     Color,
     Theme,
     Subscription,
-    keyboard
 };
 use engine::{
     ActionHandler,
@@ -25,6 +28,7 @@ use engine::{
 };
 use tracing_subscriber;
 
+mod hotkey;
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -33,8 +37,10 @@ enum Message {
     SelectDown,
     Execute,
     Hide,
+    Show,
+    PollHotkey,
+    HotkeyTriggered,
     Ignored,
-    WindowClosed,
 }
 
 pub struct Launcher {
@@ -44,6 +50,7 @@ pub struct Launcher {
     selected: usize,
     config: Config,
     is_visible: bool,
+    hotkey_handler: Option<hotkey::HotkeyHandler>,
 }
 
 impl Launcher {
@@ -56,6 +63,14 @@ impl Launcher {
         let mut engine = SearchEngine::new();
         engine.set_items(items);
 
+        let hotkey_handler = match hotkey::HotkeyHandler::new(&config) {
+            Ok(h) => Some(h),
+            Err(e) => {
+                eprintln!("Failed to register hotkey: {}", e);
+                None
+            }
+        };
+
         let mut app = Self {
             search_engine: engine,
             query: String::new(),
@@ -63,6 +78,7 @@ impl Launcher {
             selected: 0,
             config,
             is_visible: true,
+            hotkey_handler: hotkey_handler
         };
         app.update_results();
         app
@@ -91,11 +107,26 @@ impl Launcher {
                 }
                 return iced::Task::done(Message::Hide);
             }
-            Message::Hide | Message::WindowClosed => {
+            Message::Hide => {
                 self.is_visible = false;
                 self.query.clear();
                 self.update_results();
                 self.selected = 0;
+            }
+            Message::Show => {
+                self.query.clear();
+                self.update_results();
+                self.selected = 0
+            }
+            Message::PollHotkey => {
+                if let Some(handler) = &self.hotkey_handler {
+                    if handler.try_recv().is_some() {
+                        return iced::Task::done(Message::HotkeyTriggered);
+                    }
+                }
+            }
+            Message::HotkeyTriggered => {
+                return iced::Task::done(Message::Show);
             }
             Message::Ignored => {}
         }
@@ -199,21 +230,26 @@ impl Launcher {
         .into()
     }
 
-    pub fn subscription(&self) -> Subscription<Message> {
-        keyboard::listen().map(|event| {
+    fn subscription(&self) -> Subscription<Message> {
+        let keyboard_sub = keyboard::listen().map(|event| {
             match event {
                 keyboard::Event::KeyPressed { key, .. } => {
                     match key {
-                        keyboard::Key::Named(keyboard::key::Named::ArrowDown) => Message::SelectDown,
-                        keyboard::Key::Named(keyboard::key::Named::ArrowUp) => Message::SelectUp,
-                        keyboard::Key::Named(keyboard::key::Named::Enter) => Message::Execute,
-                        keyboard::Key::Named(keyboard::key::Named::Escape) => Message::Hide,
+                        Key::Named(keyboard::key::Named::ArrowDown) => Message::SelectDown,
+                        Key::Named(keyboard::key::Named::ArrowUp) => Message::SelectUp,
+                        Key::Named(keyboard::key::Named::Enter) => Message::Execute,
+                        Key::Named(keyboard::key::Named::Escape) => Message::Hide,
                         _ => Message::Ignored,
                     }
                 }
                 _ => Message::Ignored,
             }
-        })
+        });
+
+        let hotkey_sub = iced::time::every(std::time::Duration::from_millis(50))
+            .map(|_| Message::PollHotkey);
+
+        Subscription::batch([keyboard_sub, hotkey_sub])
     }
 }
 

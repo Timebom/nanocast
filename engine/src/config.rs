@@ -10,9 +10,12 @@ pub struct Config {
 
     #[serde(default)]
     pub index: IndexConfig,
+
+    #[serde(default)]
+    pub hotkey: HotkeyConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexConfig {
     pub index_applications: bool,
     pub index_files: bool,
@@ -23,37 +26,59 @@ pub struct IndexConfig {
     pub ignored_patterns: Vec<String>
 }
 
+impl Default for IndexConfig {
+    fn default() -> Self {
+        Self {
+            index_applications: true,
+            index_files: true,
+            index_folders: false,
+            applications_paths: vec![
+                "/Applications".to_string(),
+                "~/Applications".to_string(),
+                "/usr/bin".to_string(),
+                "/usr/local/bin".to_string()
+            ],
+            file_paths: vec![
+                "~/Downloads".to_string(),
+                "~/Documents".to_string(),
+                "~/Pictures".to_string(),
+                "~/Music".to_string()
+            ],
+            ignored_patterns: vec![
+                "/sys".to_string(),
+                "/tmp".to_string(),
+                "/sbin".to_string(),
+                "/proc".to_string(),
+                "/boot".to_string(),
+                ".git".to_string(),
+                "node_modules".to_string()
+            ]
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HotkeyConfig {
+    pub modifiers: String,
+    pub key: String,
+}
+
+impl Default for HotkeyConfig {
+    fn default() -> Self {
+        Self {
+            modifiers: "Control".to_string(),
+            key: "Space".to_string(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             max_results: 50,
             fuzzy_threshold: 0.0,
-            index: IndexConfig {
-                index_applications: true,
-                index_files: true,
-                index_folders: false,
-                applications_paths: vec![
-                    "/Applications".to_string(),
-                    "~/Applications".to_string(),
-                    "/usr/bin".to_string(),
-                    "/usr/local/bin".to_string()
-                ],
-                file_paths: vec![
-                    "~/Downloads".to_string(),
-                    "~/Documents".to_string(),
-                    "~/Pictures".to_string(),
-                    "~/Music".to_string()
-                ],
-                ignored_patterns: vec![
-                    "/sys".to_string(),
-                    "/tmp".to_string(),
-                    "/sbin".to_string(),
-                    "/proc".to_string(),
-                    "/boot".to_string(),
-                    ".git".to_string(),
-                    "node_modules".to_string()
-                ]
-            }
+            index: IndexConfig::default(),
+            hotkey: HotkeyConfig::default(),
         }
     }
 }
