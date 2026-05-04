@@ -1,5 +1,6 @@
 use iced::{
     widget::{
+        row,
         column,
         container,
         scrollable,
@@ -9,6 +10,8 @@ use iced::{
     },
     Alignment,
     Element,
+    Color,
+    Theme,
 };
 use engine::{
     ActionHandler,
@@ -28,7 +31,7 @@ enum Message {
     SelectDown,
     Execute,
     Hide,
-    Ignored,
+    WindowClosed,
 }
 
 pub struct Launcher {
@@ -37,6 +40,7 @@ pub struct Launcher {
     results: Vec<SearchResult>,
     selected: usize,
     config: Config,
+    is_visible: bool,
 }
 
 impl Launcher {
@@ -49,13 +53,16 @@ impl Launcher {
         let mut engine = SearchEngine::new();
         engine.set_items(items);
 
-        Self {
+        let mut app = Self {
             search_engine: engine,
             query: String::new(),
             results: Vec::new(),
             selected: 0,
             config,
-        }
+            is_visible: true,
+        };
+        app.update_results();
+        app
     }
 
     fn update(&mut self, message: Message) -> iced::Task<Message> {
@@ -78,13 +85,13 @@ impl Launcher {
                         eprintln!("Action error: {}", e);
                     }
                 }
-                return iced::Task::perform(async {}, |_| Message::Hide);
+                return iced::Task::done(Message::Hide);
             }
-            Message::Hide => {
+            Message::Hide | Message::WindowClosed => {
+                self.is_visible = false;
                 self.query.clear();
                 self.update_results();
             }
-            Message::Ignored => {}
         }
         iced::Task::none()
     }
@@ -107,57 +114,79 @@ impl Launcher {
         let input = text_input("Search...", &self.query)
             .on_input(Message::QueryChanged)
             .size(24)
-            .padding(16);
+            .padding(16)
+            .style(|theme, status| text_input::Style {
+                background: iced::Background::Color(iced::Color::from_rgb(0.12, 0.12, 0.14)),
+                ..text_input::default(theme, status)
+            });
 
         let results_list: Element<_> = if self.results.is_empty() {
-            text("No results").into()
+            text("No results").size(16).into()
         } else {
             self.results
                 .iter()
                 .enumerate()
-                .take(15)
-                .fold(Column::new(), |col, (i, result)| {
+                .take(20)
+                .fold(Column::new().spacing(4), |col, (i, result)| {
                     let is_selected = i == self.selected;
 
-                    let row = column![
+                    let item_row = row![
                         text(&result.item.title).size(18),
-                        text(result.item.subtitle.as_deref().unwrap_or(""))
-                            .size(14)
-                            .style(|_| text::Style {
-                                color: Some(iced::Color::from_rgb(0.7, 0.7, 0.7)),
-                            })
                     ]
-                    .padding(8)
-                    .spacing(4);
+                    .spacing(12)
+                    .align_y(Alignment::Center);
 
-                    let styled = if is_selected {
-                        container(row).style(|_| container::Style {
-                            background: Some(iced::Background::Color(iced::Color::from_rgb(0.2, 0.3, 0.5))),
-                            ..Default::default()
+                    let subtitle = if let Some(sub) = &result.item.subtitle {
+                        text(sub).size(14).style(|_| text::Style {
+                            color: Some(Color::from_rgb(0.65, 0.65, 0.7)),
                         })
                     } else {
-                        container(row)
+                        text("")
                     };
 
-                    col.push(styled)
+                    let content = column![item_row, subtitle].spacing(2);
+
+                    let bg_color = if is_selected {
+                        Color::from_rgb(0.25, 0.45, 0.75)
+                    } else {
+                        Color::TRANSPARENT
+                    };
+
+                    let item = container(content)
+                        .padding(12)
+                        .width(iced::Length::Fill)
+                        .style(move |_theme| container::Style {
+                            background: Some(iced::Background::Color(bg_color)),
+                            border: iced::Border {
+                                radius: 8.0.into(),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        });
+                    col.push(item)
                 })
                 .into()
         };
 
         container(
-            column![input, scrollable(results_list)]
-                .spacing(8)
-                .align_x(Alignment::Center)
+            column![input, scrollable(results_list).spacing(4)]
+                .spacing(16)
+                .padding(20)
                 .width(iced::Length::Fill),
         )
         .width(iced::Length::Fixed(700.0))
         .height(iced::Length::Fixed(500.0))
-        .padding(20)
-        .style(|_| container::Style {
-            background: Some(iced::Background::Color(iced::Color::from_rgba(0.1, 0.1, 0.1, 0.95))),
+        .style(|_theme| container::Style {
+            background: Some(iced::Background::Color(iced::Color::from_rgba(0.08, 0.08, 0.10, 0.97))),
             border: iced::Border {
-                radius: 16.0.into(),
-                ..Default::default()
+                radius: 20.0.into(),
+                width: 1.0,
+                color: Color::from_rgba(1.0, 1.0, 1.0, 0.1)
+            },
+            shadow: iced::Shadow {
+                color: Color::BLACK,
+                offset: iced::Vector::new(0.0, 10.0),
+                blur_radius: 30.0,
             },
             ..Default::default()
         })
@@ -165,11 +194,16 @@ impl Launcher {
     }
 }
 
+// fn launcher_theme(_state: &Launcher) -> Theme {
+//     Theme::Dark
+// }
+
 fn main() -> iced::Result {
     tracing_subscriber::fmt::init();
 
     iced::application(Launcher::new, Launcher::update, Launcher::view)
         .title("Nanocast")
+        // .theme(launcher_theme)
         .window(iced::window::Settings {
             size: iced::Size::new(700.0, 500.0),
             decorations: false,
