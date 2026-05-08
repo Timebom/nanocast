@@ -1,3 +1,4 @@
+use iced::Task;
 use iced::{
     keyboard::{
         self,
@@ -10,8 +11,11 @@ use iced::{
         scrollable,
         text,
         text_input,
-        Column
+        operation,
+        Id,
+        Column,
     },
+    window,
     Alignment,
     Element,
     Color,
@@ -27,8 +31,12 @@ use engine::{
     create_special_item
 };
 use tracing_subscriber;
+use std::sync::LazyLock;
 
 mod hotkey;
+
+static INPUT_ID: LazyLock<Id> = LazyLock::new(Id::unique);
+static SCROLLABLE_ID: LazyLock<Id> = LazyLock::new(Id::unique);
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -40,6 +48,7 @@ enum Message {
     Show,
     PollHotkey,
     HotkeyTriggered,
+    WindowIdFound(Option<window::Id>),
     Ignored,
 }
 
@@ -48,13 +57,12 @@ pub struct Launcher {
     query: String,
     results: Vec<SearchResult>,
     selected: usize,
-    config: Config,
-    is_visible: bool,
     hotkey_handler: Option<hotkey::HotkeyHandler>,
+    window_id: Option<window::Id>,
 }
 
 impl Launcher {
-    fn new() -> Self {
+    fn new() -> (Self, Task<Message>) {
         let config = Config::load().unwrap_or_default();
         let items = IndexBuilder::new(config.clone())
             .build()
@@ -76,12 +84,12 @@ impl Launcher {
             query: String::new(),
             results: Vec::new(),
             selected: 0,
-            config,
-            is_visible: true,
-            hotkey_handler: hotkey_handler
+            hotkey_handler: hotkey_handler,
+            window_id: None,
         };
         app.update_results();
-        app
+        let init_task = window::oldest().map(Message::WindowIdFound);
+        (app, init_task)
     }
 
     fn update(&mut self, message: Message) -> iced::Task<Message> {
@@ -93,10 +101,12 @@ impl Launcher {
             Message::SelectDown => {
                 if !self.results.is_empty() {
                     self.selected = (self.selected + 1).min(self.results.len() - 1);
+                    return self.scroll_to_selected();
                 }
             }
             Message::SelectUp => {
                 self.selected = self.selected.saturating_sub(1);
+                return self.scroll_to_selected();
             }
             Message::Execute => {
                 if let Some(result) = self.results.get(self.selected) {
@@ -108,15 +118,24 @@ impl Launcher {
                 return iced::Task::done(Message::Hide);
             }
             Message::Hide => {
-                self.is_visible = false;
                 self.query.clear();
                 self.update_results();
                 self.selected = 0;
+                if let Some(id) = self.window_id {
+                    return window::set_mode(id, window::Mode::Hidden);
+                }
             }
             Message::Show => {
                 self.query.clear();
                 self.update_results();
-                self.selected = 0
+                self.selected = 0;
+                if let Some(id) = self.window_id {
+                    return Task::batch([
+                        window::set_mode(id, window::Mode::Windowed),
+                        window::gain_focus(id),
+                        operation::focus(INPUT_ID.clone()),
+                    ]);
+                };
             }
             Message::PollHotkey => {
                 if let Some(handler) = &self.hotkey_handler {
@@ -128,9 +147,33 @@ impl Launcher {
             Message::HotkeyTriggered => {
                 return iced::Task::done(Message::Show);
             }
+            Message::WindowIdFound(id) => {
+                self.window_id = id;
+                if let Some(id) = self.window_id {
+                    return window::set_mode(id, window::Mode::Hidden);
+                }
+            }
             Message::Ignored => {}
         }
         iced::Task::none()
+    }
+
+    fn scroll_to_selected(&self) -> Task<Message> {
+        // Window 500px - search input (~80px) - padding(~40px) = ~380px visible
+        // 380px / 70px per item ~= 5 visible items
+        let visible_items = 5usize;
+
+        let scroll_y = if self.selected < visible_items {
+            0.0
+        } else {
+            (self.selected - visible_items + 1) as f32 * 70.0
+        };
+
+        // let offset = (self.selected as f32 * 70.0).max(0.0);
+        operation::scroll_to(
+            SCROLLABLE_ID.clone(),
+            scrollable::AbsoluteOffset { x: 0.0, y: scroll_y },
+        )
     }
 
     fn update_results(&mut self) {
@@ -149,6 +192,7 @@ impl Launcher {
 
     fn view(&self) -> Element<'_, Message> {
         let input = text_input("Search...", &self.query)
+            .id(INPUT_ID.clone())
             .on_input(Message::QueryChanged)
             .size(24)
             .padding(16)
@@ -206,7 +250,7 @@ impl Launcher {
         };
 
         container(
-            column![input, scrollable(results_list).spacing(4)]
+            column![input, scrollable(results_list).id(SCROLLABLE_ID.clone()).spacing(4)]
                 .spacing(16)
                 .padding(20)
                 .width(iced::Length::Fill),
