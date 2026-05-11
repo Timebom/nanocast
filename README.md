@@ -34,14 +34,14 @@ Built with ❤️ in Rust.
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/nanocast.git
-cd nanocast
+git clone https://github.com/Timebom/nanocast.git
+cd nanocast/ui
 
 # Build release version
-cargo build --release
+cargo run
 
 # Run
-./target/release/nanocast
+../target/debug/ui
 ```
 
 ## Usage
