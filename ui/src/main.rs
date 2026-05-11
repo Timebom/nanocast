@@ -52,6 +52,7 @@ enum Message {
     PollHotkey,
     HotkeyTriggered,
     WindowIdFound(Option<window::Id>),
+    WindowUnfocused,
     Ignored,
 }
 
@@ -62,6 +63,8 @@ pub struct Launcher {
     selected: usize,
     hotkey_handler: Option<hotkey::HotkeyHandler>,
     window_id: Option<window::Id>,
+    is_visible: bool,
+    shown_at: Option<std::time::Instant>,
 }
 
 impl Launcher {
@@ -88,6 +91,8 @@ impl Launcher {
             selected: 0,
             hotkey_handler: hotkey_handler,
             window_id: None,
+            is_visible: false,
+            shown_at: None,
         };
         app.update_results();
         let init_task = window::oldest().map(Message::WindowIdFound);
@@ -120,6 +125,8 @@ impl Launcher {
                 return iced::Task::done(Message::Hide);
             }
             Message::Hide => {
+                self.is_visible = false;
+                self.shown_at = None;
                 self.query.clear();
                 self.update_results();
                 self.selected = 0;
@@ -128,6 +135,8 @@ impl Launcher {
                 }
             }
             Message::Show => {
+                self.is_visible = true;
+                self.shown_at = Some(std::time::Instant::now());
                 self.query.clear();
                 self.update_results();
                 self.selected = 0;
@@ -155,6 +164,15 @@ impl Launcher {
                     return window::set_mode(id, window::Mode::Hidden);
                 }
             }
+            Message::WindowUnfocused => {
+                let too_soon = self.shown_at
+                    .map(|t| t.elapsed() < std::time::Duration::from_millis(150))
+                    .unwrap_or(false);
+
+                if self.is_visible && !too_soon {
+                    return iced::Task::done(Message::Hide);
+                }
+            }
             Message::Ignored => {}
         }
         iced::Task::none()
@@ -163,7 +181,7 @@ impl Launcher {
     fn scroll_to_selected(&self) -> Task<Message> {
         // Window 500px - search input (~80px) - padding(~40px) = ~380px visible
         // 380px / 70px per item ~= 5 visible items
-        let visible_items = 5usize;
+        let visible_items = ((CONFIG.window.width - 80.0 - 40.0) / 70.0) as usize;
 
         let scroll_y = if self.selected < visible_items {
             0.0
@@ -273,8 +291,8 @@ impl Launcher {
                 .padding(20)
                 .width(iced::Length::Fill),
         )
-        .width(iced::Length::Fixed(700.0))
-        .height(iced::Length::Fixed(500.0))
+        .width(iced::Length::Fixed(CONFIG.window.width))
+        .height(iced::Length::Fixed(CONFIG.window.height))
         .style(|_theme| container::Style {
             background: Some(iced::Background::Color(iced::Color::from_rgba(0.08, 0.08, 0.10, 0.97))),
             border: iced::Border {
@@ -311,7 +329,14 @@ impl Launcher {
         let hotkey_sub = iced::time::every(std::time::Duration::from_millis(50))
             .map(|_| Message::PollHotkey);
 
-        Subscription::batch([keyboard_sub, hotkey_sub])
+        let window_sub = window::events().map(|(_, event)| {
+            match event {
+                window::Event::Unfocused => Message::WindowUnfocused,
+                _ => Message::Ignored,
+            }
+        });
+
+        Subscription::batch([keyboard_sub, hotkey_sub, window_sub])
     }
 }
 
@@ -327,12 +352,13 @@ fn main() -> iced::Result {
         // .theme(launcher_theme)
         .subscription(Launcher::subscription)
         .window(iced::window::Settings {
-            size: iced::Size::new(700.0, 500.0),
+            size: iced::Size::new(CONFIG.window.width, CONFIG.window.height),
             decorations: false,
             transparent: true,
             level: iced::window::Level::AlwaysOnTop,
             resizable: false,
             position: iced::window::Position::Centered,
+            visible: false,
             ..Default::default()
         })
         .run()

@@ -1,10 +1,13 @@
+<!-- Header -->
+<p align="left">
+  <img src="assets/icons/icon.png" width="128" height="128" alt="NanoCast icon" />
+</p>
+
 # NanoCast
 
 **A fast, lightweight, Spotlight/Raycast-inspired popup launcher for Linux and macOS.**
 
 Built with ❤️ in Rust.
-
-![NanoCast Screenshot](https://github.com/Timebom/nanocast/tree/main/docs/demo.png)
 
 ---
 
@@ -24,7 +27,7 @@ Built with ❤️ in Rust.
 
 ## Screenshots
 
-![NanoCast in action](https://github.com/Timebom/nanocast/tree/main/screenshots/demo.png)
+![NanoCast in action](docs/demo.png)
 
 ---
 
@@ -42,6 +45,10 @@ cargo run
 
 # Run
 ../target/debug/ui
+
+# Kill/Terminate
+ps -ael
+kill <nanocast-ps-id>
 ```
 
 ## Usage
@@ -70,7 +77,7 @@ key = "Space"
 
 [window]
 width = 700
-height = 520
+height = 500
 blur = true
 
 [index]
