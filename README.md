@@ -4,7 +4,7 @@
 
 Built with ❤️ in Rust.
 
-![NanoCast Screenshot](https://github.com/yourusername/nanocast/raw/main/screenshots/main.png)
+![NanoCast Screenshot](https://github.com/Timebom/nanocast/tree/main/docs/demo.png)
 
 ---
 
@@ -24,7 +24,7 @@ Built with ❤️ in Rust.
 
 ## Screenshots
 
-![NanoCast in action](https://github.com/Timebom/nanocast/raw/main/screenshots/first.png)
+![NanoCast in action](https://github.com/Timebom/nanocast/tree/main/screenshots/demo.png)
 
 ---
 
