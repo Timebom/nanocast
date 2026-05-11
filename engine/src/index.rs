@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::path::Path;
 use walkdir::WalkDir;
 use shellexpand::tilde;
+use freedesktop_icons::lookup;
 
 pub struct IndexBuilder {
     config: Config,
@@ -19,10 +20,17 @@ impl IndexBuilder {
     pub fn build(&self) -> Result<Vec<LauncherItem>> {
         let mut items = Vec::new();
 
-        if self.config.index.index_applications {
-            for path in &self.config.index.applications_paths {
-                let expanded = tilde(path);
-                self.index_applications(&expanded, &mut items)?;
+        #[cfg(target_os = "linux")]
+        {
+            if self.config.index.index_applications {
+                self.index_linux_desktop_files(&mut items)?;
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            if self.config.index.index_applications {
+                self.index_macos_applications(&mut items)?;
             }
         }
 
@@ -38,6 +46,93 @@ impl IndexBuilder {
         items.dedup_by_key(|i| i.path.clone());
 
         Ok(items)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn index_linux_desktop_files(&self, items: &mut Vec<LauncherItem>) -> Result<()> {
+        use freedesktop_file_parser::{parse, EntryType};
+
+        let desktop_dirs = vec![
+            "/usr/share/applications",
+            "/usr/local/share/applications",
+            "~/.local/share/applications",
+        ];
+
+        for dir in desktop_dirs {
+            let path = tilde(dir).into_owned();
+            let dir_path = Path::new(&path);
+            if !dir_path.exists() {
+                continue;
+            }
+
+            for entry in WalkDir::new(dir_path)
+                .max_depth(2)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                let p = entry.path();
+                if p.extension().and_then(|s| s.to_str()) != Some("desktop") {
+                    continue;
+                }
+
+                let content = match std::fs::read_to_string(p) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+
+                let desktop = match parse(&content) {
+                    Ok(d) => d,
+                    Err(_) => continue,
+                };
+
+                let app = match desktop.entry.entry_type {
+                    EntryType::Application(app) => app,
+                    _ => continue,
+                };
+
+                if desktop.entry.no_display.unwrap_or(false) || desktop.entry.hidden.unwrap_or(false) {
+                    continue;
+                }
+
+                let name = desktop.entry.name.default;
+
+                let exec = app.exec
+                    .or(app.try_exec)
+                    .unwrap_or_default();
+
+                let icon = desktop.entry.icon
+                    .map(|i| i.content)
+                    .unwrap_or_else(|| "assets/icons/icon.png".into());
+
+                let icon_path = lookup(&icon.as_str())
+                    .with_size(48)
+                    .with_cache()
+                    .find()
+                    .map(|p| p.to_string_lossy().to_string());
+
+                let tag = desktop.entry.generic_name
+                    .map(|g| g.default)
+                    .unwrap_or_else(|| name.clone());
+
+                items.push(LauncherItem {
+                    id: format!("desktop:{}", p.to_string_lossy()),
+                    title: name,
+                    subtitle: Some("Application".to_string()),
+                    path: Some(exec),
+                    icon_path: icon_path,
+                    item_type: ItemType::Application,
+                    tags: vec![tag],
+                });
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn index_macos_applications(&self, items: &mut Vec<LauncherItem>) -> Result<()> {
+        self.index_applications("/Applications", items)?;
+        self.index_applications("~/Applications", items)?;
+        Ok(())
     }
 
     fn index_applications(&self, base_path: &str, items: &mut Vec<LauncherItem>) -> Result<()> {

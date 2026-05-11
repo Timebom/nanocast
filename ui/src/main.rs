@@ -1,4 +1,3 @@
-use iced::Task;
 use iced::{
     keyboard::{
         self,
@@ -12,10 +11,13 @@ use iced::{
         text,
         text_input,
         operation,
+        image,
+        svg,
         Id,
         Column,
     },
     window,
+    Task,
     Alignment,
     Element,
     Color,
@@ -37,6 +39,7 @@ mod hotkey;
 
 static INPUT_ID: LazyLock<Id> = LazyLock::new(Id::unique);
 static SCROLLABLE_ID: LazyLock<Id> = LazyLock::new(Id::unique);
+static CONFIG: LazyLock<Config> = LazyLock::new(|| Config::load().unwrap_or_default());
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -63,15 +66,14 @@ pub struct Launcher {
 
 impl Launcher {
     fn new() -> (Self, Task<Message>) {
-        let config = Config::load().unwrap_or_default();
-        let items = IndexBuilder::new(config.clone())
+        let items = IndexBuilder::new(CONFIG.clone())
             .build()
             .unwrap_or_default();
 
         let mut engine = SearchEngine::new();
         engine.set_items(items);
 
-        let hotkey_handler = match hotkey::HotkeyHandler::new(&config) {
+        let hotkey_handler = match hotkey::HotkeyHandler::new(&CONFIG) {
             Ok(h) => Some(h),
             Err(e) => {
                 eprintln!("Failed to register hotkey: {}", e);
@@ -211,7 +213,23 @@ impl Launcher {
                 .fold(Column::new().spacing(4), |col, (i, result)| {
                     let is_selected = i == self.selected;
 
+                    let icon_widget: Element<_> = match &result.item.icon_path {
+                        Some(path) if path.ends_with(".svg") => svg(path)
+                            .width(32)
+                            .height(32)
+                            .into(),
+                        Some(path) => image(path)
+                            .width(32)
+                            .height(32)
+                            .into(),
+                        None => container(text(""))
+                            .width(0)
+                            .height(0)
+                            .into(),
+                    };
+
                     let item_row = row![
+                        icon_widget,
                         text(&result.item.title).size(18),
                     ]
                     .spacing(12)

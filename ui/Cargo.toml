@@ -7,7 +7,7 @@ authors = ["Shvet Saravade"]
 [dependencies]
 global-hotkey = "0.8.0"
 engine = { path = "../engine" }
-iced = { version = "0.14", features = ["wgpu", "tokio"] }
+iced = { version = "0.14", features = ["wgpu", "tokio", "image", "svg"] }
 anyhow = { workspace = true }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

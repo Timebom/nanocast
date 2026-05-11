@@ -13,6 +13,9 @@ pub struct Config {
 
     #[serde(default)]
     pub hotkey: HotkeyConfig,
+
+    #[serde(default)]
+    pub window: WindowConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,8 +38,9 @@ impl Default for IndexConfig {
             applications_paths: vec![
                 "/Applications".to_string(),
                 "~/Applications".to_string(),
-                "/usr/bin".to_string(),
-                "/usr/local/bin".to_string()
+                "/usr/share/applications".to_string(),
+                "/usr/local/share/applications".to_string(),
+                "~/.local/share/applications".to_string(),
             ],
             file_paths: vec![
                 "~/Downloads".to_string(),
@@ -65,9 +69,27 @@ pub struct HotkeyConfig {
 
 impl Default for HotkeyConfig {
     fn default() -> Self {
+        let is_macos = cfg!(target_os = "macos");
         Self {
-            modifiers: "Control".to_string(),
+            modifiers: if is_macos { "Meta".to_string() } else { "Control".to_string() },
             key: "Space".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowConfig {
+    pub width: f32,
+    pub height: f32,
+    pub blur: bool,
+}
+
+impl Default for WindowConfig {
+    fn default() -> Self {
+        Self {
+            width: 700.0,
+            height: 500.0,
+            blur: true,
         }
     }
 }
@@ -79,6 +101,7 @@ impl Default for Config {
             fuzzy_threshold: 0.0,
             index: IndexConfig::default(),
             hotkey: HotkeyConfig::default(),
+            window: WindowConfig::default(),
         }
     }
 }

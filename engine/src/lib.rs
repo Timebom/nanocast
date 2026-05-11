@@ -4,7 +4,7 @@ pub mod search;
 pub mod actions;
 pub mod index;
 
-pub use config::{Config, HotkeyConfig, IndexConfig};
+pub use config::{Config, HotkeyConfig, IndexConfig, WindowConfig};
 pub use models::*;
 pub use search::SearchEngine;
 pub use index::IndexBuilder;

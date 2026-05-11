@@ -44,11 +44,11 @@ mod tests {
 
 		if let Some(top) = results.first() {
     		println!("Executing: {}", top.item.title);
-    		ActionHandler::execute(&top.item);
+    		ActionHandler::execute(&top.item).expect("Failed to execute file");
 		}
 
 		if let Some(special) = create_special_item("https://github.com") {
-            ActionHandler::execute(&special);
+            ActionHandler::execute(&special).expect("Failed to execute link");
 		}
 	}
 }

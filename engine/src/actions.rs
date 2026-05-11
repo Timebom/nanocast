@@ -71,7 +71,26 @@ impl ActionHandler {
                 {
                     Command::new("open").arg("-a").arg(&path).status()?;
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(target_os = "linux")]
+                {
+                    let clean = path
+                        .split_whitespace()
+                        .filter(|arg| !(arg.starts_with("%") && arg.len() == 2))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+
+                    let mut parts = clean.split_whitespace();
+                    let program = match parts.next() {
+                        Some(p) => p.to_string(),
+                        None => return Err(anyhow::anyhow!("Empty exec path")),
+                    };
+                    let args: Vec<String> = parts.map(|s| s.to_string()).collect();
+
+                    Command::new(&program)
+                        .args(&args)
+                        .spawn()?;
+                }
+                #[cfg(target_os = "windows")]
                 {
                     open::that(&path)?;
                 }
