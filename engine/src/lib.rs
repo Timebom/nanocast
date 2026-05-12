@@ -10,4 +10,4 @@ pub use models::*;
 pub use search::SearchEngine;
 pub use index::IndexBuilder;
 pub use actions::{Action, ActionHandler, create_special_item};
-pub use shortcuts::ShortcutEngine;
+pub use shortcuts::{ShortcutEngine, DetectedShortcut, CommandSlot, CommandModeState};

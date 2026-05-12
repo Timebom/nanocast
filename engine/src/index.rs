@@ -41,6 +41,20 @@ impl IndexBuilder {
             }
         }
 
+        let shortcut_engine = crate::shortcuts::ShortcutEngine::new(&self.config);
+        items.extend(shortcut_engine.all_shortcuts().iter().map(|sc| {
+                LauncherItem {
+                    id: format!("shortcut:{}", sc.trigger),
+                    title: format!("{} -> {}", sc.trigger, sc.name),
+                    subtitle: Some(format!("Shortcut: {}", sc.action_type)),
+                    path: None,
+                    icon_path: sc.icon.clone(),
+                    item_type: ItemType::default(),
+                    tags: vec!["shortcut".into()],
+                }
+            })
+        );
+
         // Remove duplicates by path
         items.sort_by_key(|i| i.path.clone());
         items.dedup_by_key(|i| i.path.clone());

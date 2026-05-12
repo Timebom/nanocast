@@ -35,6 +35,7 @@ use engine::{
     LauncherItem,
     create_special_item
 };
+use engine::shortcuts::CommandModeState;
 use tracing_subscriber;
 use std::sync::LazyLock;
 
@@ -56,7 +57,14 @@ enum Message {
     HotkeyTriggered,
     WindowIdFound(Option<window::Id>),
     WindowUnfocused,
+    Tab,
     Ignored,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum InputMode {
+    Normal,
+    Command,
 }
 
 pub struct Launcher {
@@ -69,7 +77,9 @@ pub struct Launcher {
     is_visible: bool,
     shown_at: Option<std::time::Instant>,
     shortcut_engine: ShortcutEngine,
-    pending_shortcut_action: Option<Action>,
+    pending_shortcut: Option<Action>,
+    mode: InputMode,
+    command_state: Option<CommandModeState>,
 }
 
 impl Launcher {
@@ -99,7 +109,9 @@ impl Launcher {
             is_visible: false,
             shown_at: None,
             shortcut_engine: ShortcutEngine::new(&CONFIG),
-            pending_shortcut_action: None,
+            pending_shortcut: None,
+            mode: InputMode::Normal,
+            command_state: None,
         };
         app.update_results();
         let init_task = window::oldest().map(Message::WindowIdFound);
@@ -109,8 +121,36 @@ impl Launcher {
     fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
             Message::QueryChanged(new_query) => {
-                self.query = new_query;
-                self.update_results();
+                match self.mode {
+                    InputMode::Command => {
+                        if let Some(cs) = self.command_state.as_mut() {
+                            cs.set_active_value(new_query.clone());
+                        }
+                        self.query = new_query;
+                        self.update_results();
+                    }
+                    InputMode::Normal => {
+                        if new_query.starts_with('>') {
+                            let after = new_query[1..].trim();
+                            if after.contains(' ') {
+                                if let Some(cs) = self.shortcut_engine.detect_command_mode(&new_query) {
+                                    self.mode = InputMode::Command;
+                                    let first_value = cs.active_value().to_string();
+                                    self.command_state = Some(cs);
+                                    self.query = first_value;
+                                    self.update_results();
+                                    return iced::Task::none();
+                                }
+                            }
+                        } else {
+                            if self.mode == InputMode::Command {
+                                self.exit_command_mode();
+                            }
+                        }
+                        self.query = new_query;
+                        self.update_results();
+                    }
+                }
             }
             Message::SelectDown => {
                 if !self.results.is_empty() {
@@ -123,14 +163,21 @@ impl Launcher {
                 return self.scroll_to_selected();
             }
             Message::Execute => {
-                if let Some(action) = self.pending_shortcut_action.clone() {
+                if self.mode == InputMode::Command {
+                    if let Some(cs) = &self.command_state {
+                        let action = cs.build_action();
+                        if let Err(e) = ActionHandler::execute_shortcut(action) {
+                            eprintln!("Command mode execution error: {}", e);
+                        }
+                    }
+                } else if let Some(action) = self.pending_shortcut.clone() {
                     if let Err(e) = ActionHandler::execute_shortcut(action) {
-                        eprintln!("Shortcut Execution error: {}", e);
-                    };
+                        eprintln!("Shortcut execution error: {}", e);
+                    }
                 } else if let Some(result) = self.results.get(self.selected) {
                     println!("Executing: {}", result.item.title);
                     if let Err(e) = ActionHandler::execute(&result.item) {
-                        eprintln!("Action Execution error: {}", e);
+                        eprintln!("Action execution error: {}", e);
                     }
                 }
                 return iced::Task::done(Message::Hide);
@@ -139,8 +186,10 @@ impl Launcher {
                 self.is_visible = false;
                 self.shown_at = None;
                 self.query.clear();
+                self.exit_command_mode();
                 self.update_results();
                 self.selected = 0;
+                self.pending_shortcut = None;
                 if let Some(id) = self.window_id {
                     return window::set_mode(id, window::Mode::Hidden);
                 }
@@ -149,8 +198,10 @@ impl Launcher {
                 self.is_visible = true;
                 self.shown_at = Some(std::time::Instant::now());
                 self.query.clear();
+                self.exit_command_mode();
                 self.update_results();
                 self.selected = 0;
+                self.pending_shortcut = None;
                 if let Some(id) = self.window_id {
                     return Task::batch([
                         window::set_mode(id, window::Mode::Windowed),
@@ -184,9 +235,41 @@ impl Launcher {
                     return iced::Task::done(Message::Hide);
                 }
             }
+            Message::Tab => {
+                if self.mode == InputMode::Command {
+                    if let Some(cs) = self.command_state.as_mut() {
+                        let moved = cs.tab_next();
+                        if moved {
+                            let val = cs.active_value().to_string();
+                            self.query = val;
+                            self.update_results();
+                        }
+                    }
+                } else {
+                    if let Some(result) = self.results.get(self.selected) {
+                        if result.item.id.starts_with("shortcut:") {
+                            let trigger = result.item.id.trim_start_matches("shortcut:");
+
+                            let prefixed = format!("> {} ", trigger);
+                            if let Some(cs) = self.shortcut_engine.detect_command_mode(&prefixed) {
+                                self.mode = InputMode::Command;
+                                let first_value = cs.active_value().to_string();
+                                self.command_state = Some(cs);
+                                self.query = first_value;
+                                self.update_results();
+                            }
+                        }
+                    }
+                }
+            }
             Message::Ignored => {}
         }
         iced::Task::none()
+    }
+
+    fn exit_command_mode(&mut self) {
+        self.mode = InputMode::Normal;
+        self.command_state = None;
     }
 
     fn scroll_to_selected(&self) -> Task<Message> {
@@ -212,18 +295,40 @@ impl Launcher {
     }
 
     fn update_results(&mut self) {
-        if let Some((action, _name)) = self.shortcut_engine.detect(&self.query) {
+        if self.mode == InputMode::Command {
+            if let Some(cs) = &self.command_state {
+                let hint = cs.slot_hint();
+                let tab_tip = if cs.slots.len() > 1 && cs.active_slot < cs.slots.len() - 1 {
+                    format!("Tab -> next slot | Enter to run | {}", hint)
+                } else {
+                    format!("Enter to run | {}", hint)
+                };
+                self.results = vec![SearchResult {
+                    item: LauncherItem {
+                        id: format!("cmd:{}", cs.trigger),
+                        title: format!("⌘ {} - {}", cs.shortcut_name, cs.trigger),
+                        subtitle: Some(tab_tip),
+                        ..Default::default()
+                    },
+                    score: 100.0,
+                }]
+            }
+            return;
+        }
+
+        if let Some(shortcut) = self.shortcut_engine.detect(&self.query) {
             self.results = vec![SearchResult {
                 item: LauncherItem {
-                    id: format!("shortcut:{}", _name),
-                    title: format!("{} -> {}", self.query, "Execute"),
-                    subtitle: Some("Shortcut".into()),
+                    id: format!("shortcut:{}", shortcut.trigger),
+                    title: format!("> {} - {}", shortcut.name, shortcut.trigger),
+                    subtitle: Some("Press Enter to run | Tab for command mode (slot filling)".into()),
                     ..Default::default()
                 },
                 score: 100.0,
             }];
-            self.pending_shortcut_action = Some(action);
+            self.pending_shortcut = Some(shortcut.action);
         } else {
+            self.pending_shortcut = None;
             if self.query.trim().is_empty() {
                 self.results = self.search_engine.search("");
             } else if let Some(special) = create_special_item(&self.query) {
@@ -232,6 +337,26 @@ impl Launcher {
                     score: 100.0,
                 }];
             } else {
+                if self.query.starts_with('>') {
+                    let prefix = self.query[1..].trim();
+                    let matching = self.shortcut_engine.matching_shortcuts(prefix);
+                    if !matching.is_empty() {
+                        self.results = matching
+                            .iter()
+                            .map(|sc| SearchResult {
+                                item: LauncherItem {
+                                    id: format!("shortcut:{}", sc.trigger),
+                                    title: format!("> {} ({})", sc.name, sc.trigger),
+                                    subtitle: Some(format!("Tab to fill slots · action: {}", sc.action_type)),
+                                    ..Default::default()
+                                },
+                                score: 90.0,
+                            })
+                            .collect();
+                        self.selected = 0;
+                        return;
+                    }
+                }
                 self.results = self.search_engine.search(&self.query);
             }
         }
@@ -239,7 +364,24 @@ impl Launcher {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let input = text_input("Search...", &self.query)
+        let (placeholder, input_label) = match (&self.mode, &self.command_state) {
+            (InputMode::Command, Some(cs)) => {
+                let slot = cs.slots.get(cs.active_slot);
+                let ph = slot.map(|s| s.name.clone()).unwrap_or_else(|| "value".into());
+
+                let label = format!(
+                    "⌘ {} > {} ({}/{})",
+                    cs.shortcut_name,
+                    ph,
+                    cs.active_slot + 1,
+                    cs.slots.iter().len()
+                );
+                (ph, Some(label))
+            }
+            _ => ("Search or type > for commands...".into(), None),
+        };
+
+        let input = text_input(&placeholder, &self.query)
             .id(INPUT_ID.clone())
             .on_input(Message::QueryChanged)
             .size(24)
@@ -248,6 +390,28 @@ impl Launcher {
                 background: iced::Background::Color(iced::Color::from_rgb(0.12, 0.12, 0.14)),
                 ..text_input::default(theme, status)
             });
+
+        let mode_badge: Element<_> = if let Some(label) = input_label {
+            container(
+                text(label)
+                    .size(16)
+                    .style(|_| text::Style {
+                        color: Some(Color::from_rgb(0.4, 0.75, 1.0)),
+                    }),
+            )
+            .padding([4, 12])
+            .style(|_| container::Style {
+                background: Some(iced::Background::Color(iced::Color::from_rgba(0.2, 0.5, 0.9, 0.18))),
+                border: iced::Border {
+                    radius: 6.0.into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .into()
+        } else {
+            text("").into()
+        };
 
         let results_list: Element<_> = if self.results.is_empty() {
             text("No results").size(16).into()
@@ -282,13 +446,13 @@ impl Launcher {
                         text("")
                     };
 
-                    let item_row = column![
+                    let item_col = column![
                         text(&result.item.title).size(18),
                         subtitle
                     ]
                     .spacing(2);
 
-                    let content = row![icon_widget, item_row]
+                    let content = row![icon_widget, item_col]
                         .spacing(12)
                         .align_y(Alignment::Center);
 
@@ -314,14 +478,27 @@ impl Launcher {
                 .into()
         };
 
+        let footer = row![mode_badge]
+            .align_y(Alignment::Center)
+            .width(iced::Length::Fill)
+            .spacing(12);
+
         container(
-            column![input, scrollable(results_list).id(SCROLLABLE_ID.clone()).spacing(4)]
+            column![
+                input,
+                scrollable(results_list)
+                    .id(SCROLLABLE_ID.clone())
+                    .spacing(4)
+                    .height(iced::Length::Fill),
+                footer
+            ]
                 .spacing(16)
                 .padding(20)
-                .width(iced::Length::Fill),
+                .width(iced::Length::Fill)
         )
         .width(iced::Length::Fixed(CONFIG.window.width))
         .height(iced::Length::Fixed(CONFIG.window.height))
+        .clip(true)
         .style(|_theme| container::Style {
             background: Some(iced::Background::Color(iced::Color::from_rgba(0.08, 0.08, 0.10, 0.97))),
             border: iced::Border {
@@ -348,6 +525,7 @@ impl Launcher {
                         Key::Named(keyboard::key::Named::ArrowUp) => Message::SelectUp,
                         Key::Named(keyboard::key::Named::Enter) => Message::Execute,
                         Key::Named(keyboard::key::Named::Escape) => Message::Hide,
+                        Key::Named(keyboard::key::Named::Tab) => Message::Tab,
                         _ => Message::Ignored,
                     }
                 }
