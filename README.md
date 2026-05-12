@@ -28,6 +28,7 @@ Built with ❤️ in Rust.
 ## Screenshots
 
 ![NanoCast in action](docs/demo.png)
+![NanoCast in command mode](docs/command_mode.png)
 
 ---
 
