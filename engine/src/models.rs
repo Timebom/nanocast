@@ -11,14 +11,29 @@ pub struct LauncherItem {
     pub tags: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub enum ItemType {
     Application,
     File,
     Folder,
+    #[default]
     Command,
     Script,
     Url,
+}
+
+impl Default for LauncherItem {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            title: String::new(),
+            subtitle: None,
+            path: None,
+            icon_path: None,
+            item_type: ItemType::default(),
+            tags: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

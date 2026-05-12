@@ -133,6 +133,18 @@ impl ActionHandler {
             }
         }
     }
+
+    pub fn execute_shortcut(action: Action) -> Result<()> {
+        Self::perform_action(action)
+    }
+
+    pub fn execute_item_or_shortcut(item: &LauncherItem, shortcut_action: Option<Action>) -> Result<()> {
+        if let Some(action) = shortcut_action {
+            Self::execute_shortcut(action)
+        } else {
+            Self::execute(item)
+        }
+    }
 }
 
 pub fn create_special_item(query: &str) -> Option<LauncherItem> {

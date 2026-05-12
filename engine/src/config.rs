@@ -16,6 +16,9 @@ pub struct Config {
 
     #[serde(default)]
     pub window: WindowConfig,
+
+    #[serde(default)]
+    pub shortcuts: Vec<ShortcutConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +97,29 @@ impl Default for WindowConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShortcutConfig {
+    pub trigger: String,
+    pub name: String,
+    pub action_type: String,
+    pub command: Option<String>,
+    pub icon: Option<String>,
+    pub key: Option<String>,
+}
+
+impl Default for ShortcutConfig {
+    fn default() -> Self {
+        ShortcutConfig {
+            trigger: "google".into(),
+            name: "Google Search".into(),
+            action_type: "open_url".into(),
+            command: Some("https://google.com/search?q={query}".into()),
+            icon: None,
+            key: Some("alt+q".to_string()),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -102,6 +128,25 @@ impl Default for Config {
             index: IndexConfig::default(),
             hotkey: HotkeyConfig::default(),
             window: WindowConfig::default(),
+            shortcuts: vec![
+                ShortcutConfig {
+                    trigger: "youtube".into(),
+                    name: "YouTube".into(),
+                    action_type: "open_url".into(),
+                    command: Some("https://youtube.com/results?search_query={query}".into()),
+                    icon: None,
+                    key: Some("ctrl+y".to_string())
+                },
+                ShortcutConfig {
+                    trigger: "calc".into(),
+                    name: "Calculator".into(),
+                    action_type: "calculator".into(),
+                    command: None,
+                    icon: None,
+                    key: None
+                },
+                ShortcutConfig::default(),
+            ],
         }
     }
 }
@@ -122,7 +167,19 @@ impl Config {
             Ok(default)
         } else {
             let content = std::fs::read_to_string(&config_path)?;
-            Ok(toml::from_str(&content)?)
+            let mut config: Config = toml::from_str(&content)?;
+
+            let default_shortcuts = Config::default().shortcuts;
+            for default_sc in default_shortcuts {
+                let already_defined = config.shortcuts
+                    .iter()
+                    .any(|sc| sc.trigger == default_sc.trigger);
+
+                if !already_defined {
+                    config.shortcuts.push(default_sc);
+                }
+            }
+            Ok(config)
         }
     }
 

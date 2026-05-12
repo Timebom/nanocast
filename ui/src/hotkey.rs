@@ -39,7 +39,7 @@ impl HotkeyHandler {
     fn parse_hotkey(hk: &engine::HotkeyConfig) -> anyhow::Result<HotKey> {
         let modifiers = match hk.modifiers.to_lowercase().as_str() {
             "control" | "ctrl" => Modifiers::CONTROL,
-            "meta" | "cmd" | "super" => Modifiers::META,
+            "meta" | "cmd" | "super" | "win" => Modifiers::META,
             "alt" => Modifiers::ALT,
             "shift" => Modifiers::SHIFT,
             _ => Modifiers::CONTROL,

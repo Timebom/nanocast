@@ -25,11 +25,14 @@ use iced::{
     Subscription,
 };
 use engine::{
+    Action,
     ActionHandler,
     Config,
     IndexBuilder,
     SearchEngine,
     SearchResult,
+    ShortcutEngine,
+    LauncherItem,
     create_special_item
 };
 use tracing_subscriber;
@@ -65,6 +68,8 @@ pub struct Launcher {
     window_id: Option<window::Id>,
     is_visible: bool,
     shown_at: Option<std::time::Instant>,
+    shortcut_engine: ShortcutEngine,
+    pending_shortcut_action: Option<Action>,
 }
 
 impl Launcher {
@@ -93,6 +98,8 @@ impl Launcher {
             window_id: None,
             is_visible: false,
             shown_at: None,
+            shortcut_engine: ShortcutEngine::new(&CONFIG),
+            pending_shortcut_action: None,
         };
         app.update_results();
         let init_task = window::oldest().map(Message::WindowIdFound);
@@ -116,7 +123,11 @@ impl Launcher {
                 return self.scroll_to_selected();
             }
             Message::Execute => {
-                if let Some(result) = self.results.get(self.selected) {
+                if let Some(action) = self.pending_shortcut_action.clone() {
+                    if let Err(e) = ActionHandler::execute_shortcut(action) {
+                        eprintln!("Shortcut Execution error: {}", e);
+                    };
+                } else if let Some(result) = self.results.get(self.selected) {
                     println!("Executing: {}", result.item.title);
                     if let Err(e) = ActionHandler::execute(&result.item) {
                         eprintln!("Action Execution error: {}", e);
@@ -181,12 +192,16 @@ impl Launcher {
     fn scroll_to_selected(&self) -> Task<Message> {
         // Window 500px - search input (~80px) - padding(~40px) = ~380px visible
         // 380px / 70px per item ~= 5 visible items
-        let visible_items = ((CONFIG.window.width - 80.0 - 40.0) / 70.0) as usize;
+        const ITEM_HEIGHT: f32 = 70.0;
+        let scrollable_height = CONFIG.window.height - 56.0 - 16.0 - 40.0;
+        let visible_items = (scrollable_height / ITEM_HEIGHT).floor() as usize;
 
         let scroll_y = if self.selected < visible_items {
             0.0
         } else {
-            (self.selected - visible_items + 1) as f32 * 70.0
+            let max_scroll = (self.results.len() as f32 * ITEM_HEIGHT - scrollable_height).max(0.0);
+            let desired = (self.selected - visible_items + 1) as f32 * ITEM_HEIGHT;
+            desired.min(max_scroll)
         };
 
         // let offset = (self.selected as f32 * 70.0).max(0.0);
@@ -197,15 +212,28 @@ impl Launcher {
     }
 
     fn update_results(&mut self) {
-        if self.query.trim().is_empty() {
-            self.results = self.search_engine.search("");
-        } else if let Some(special) = create_special_item(&self.query) {
+        if let Some((action, _name)) = self.shortcut_engine.detect(&self.query) {
             self.results = vec![SearchResult {
-                item: special,
+                item: LauncherItem {
+                    id: format!("shortcut:{}", _name),
+                    title: format!("{} -> {}", self.query, "Execute"),
+                    subtitle: Some("Shortcut".into()),
+                    ..Default::default()
+                },
                 score: 100.0,
             }];
+            self.pending_shortcut_action = Some(action);
         } else {
-            self.results = self.search_engine.search(&self.query);
+            if self.query.trim().is_empty() {
+                self.results = self.search_engine.search("");
+            } else if let Some(special) = create_special_item(&self.query) {
+                self.results = vec![SearchResult {
+                    item: special,
+                    score: 100.0,
+                }];
+            } else {
+                self.results = self.search_engine.search(&self.query);
+            }
         }
         self.selected = 0;
     }
@@ -246,13 +274,6 @@ impl Launcher {
                             .into(),
                     };
 
-                    let item_row = row![
-                        icon_widget,
-                        text(&result.item.title).size(18),
-                    ]
-                    .spacing(12)
-                    .align_y(Alignment::Center);
-
                     let subtitle = if let Some(sub) = &result.item.subtitle {
                         text(sub).size(14).style(|_| text::Style {
                             color: Some(Color::from_rgb(0.65, 0.65, 0.7)),
@@ -261,7 +282,15 @@ impl Launcher {
                         text("")
                     };
 
-                    let content = column![item_row, subtitle].spacing(2);
+                    let item_row = column![
+                        text(&result.item.title).size(18),
+                        subtitle
+                    ]
+                    .spacing(2);
+
+                    let content = row![icon_widget, item_row]
+                        .spacing(12)
+                        .align_y(Alignment::Center);
 
                     let bg_color = if is_selected {
                         Color::from_rgb(0.25, 0.45, 0.75)
