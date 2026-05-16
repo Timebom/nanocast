@@ -4,7 +4,6 @@ use anyhow::Result;
 use std::path::Path;
 use walkdir::WalkDir;
 use shellexpand::tilde;
-use freedesktop_icons::lookup;
 
 pub struct IndexBuilder {
     config: Config,
@@ -65,6 +64,7 @@ impl IndexBuilder {
     #[cfg(target_os = "linux")]
     fn index_linux_desktop_files(&self, items: &mut Vec<LauncherItem>) -> Result<()> {
         use freedesktop_file_parser::{parse, EntryType};
+        use freedesktop_icons::lookup;
 
         let desktop_dirs = vec![
             "/usr/share/applications",

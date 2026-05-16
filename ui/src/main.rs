@@ -52,6 +52,7 @@ enum Message {
     SelectUp,
     SelectDown,
     Execute,
+    CopySelected,
     Hide,
     Show,
     PollHotkey,
@@ -182,6 +183,14 @@ impl Launcher {
                     }
                 }
                 return iced::Task::done(Message::Hide);
+            }
+            Message::CopySelected => {
+                if let Some(result) = self.results.get(self.selected) {
+                    let action = ActionHandler::copy_action_for(&result.item);
+                    if let Err(e) = ActionHandler::execute_shortcut(action) {
+                        eprintln!("Copy error: {}", e);
+                    }
+                }
             }
             Message::Hide => {
                 self.is_visible = false;
@@ -485,14 +494,14 @@ impl Launcher {
             .height(Length::Fill);
 
         let footer_hints: Element<_> = if self.mode == InputMode::Command {
-            text("Tab -> next slot | Enter -> execute | Esc -> cancel")
+            text("Tab -> next slot | Enter -> execute | Esc cancel")
                 .size(14)
                 .style(|_| text::Style {
                     color: Some(Color::from_rgb(0.6, 0.6, 0.65))
                 })
                 .into()
         } else {
-            text("↑↓ select  |  Enter execute  |  Tab on shortcut → command mode  |  Esc hide")
+            text("↑↓ select  |  Enter execute  | Ctrl+C copy |  Tab → command mode  |  Esc hide")
                 .size(14)
                 .style(|_| text::Style {
                     color: Some(Color::from_rgb(0.6, 0.6, 0.65))
@@ -543,13 +552,16 @@ impl Launcher {
     fn subscription(&self) -> Subscription<Message> {
         let keyboard_sub = keyboard::listen().map(|event| {
             match event {
-                keyboard::Event::KeyPressed { key, .. } => {
+                keyboard::Event::KeyPressed { key, modifiers, .. } => {
                     match key {
                         Key::Named(keyboard::key::Named::ArrowDown) => Message::SelectDown,
                         Key::Named(keyboard::key::Named::ArrowUp) => Message::SelectUp,
                         Key::Named(keyboard::key::Named::Enter) => Message::Execute,
                         Key::Named(keyboard::key::Named::Escape) => Message::Hide,
                         Key::Named(keyboard::key::Named::Tab) => Message::Tab,
+                        Key::Character(ref c) if c.as_str() == "c" && modifiers.control() => {
+                            Message::CopySelected
+                        }
                         _ => Message::Ignored,
                     }
                 }

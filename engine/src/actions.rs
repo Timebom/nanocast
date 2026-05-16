@@ -2,6 +2,7 @@ use crate::models::{ItemType, LauncherItem};
 use anyhow::Result;
 use std::process::Command;
 use urlencoding;
+use arboard::Clipboard;
 
 #[derive(Debug, Clone)]
 pub enum Action {
@@ -10,6 +11,7 @@ pub enum Action {
     OpenUrl(String),
     RunCommand(String),
     Custom(String, Vec<String>),
+    CopyToClipboard(String),
 }
 
 pub struct ActionHandler;
@@ -131,6 +133,15 @@ impl ActionHandler {
                 Command::new(name).args(args).spawn()?;
                 Ok(())
             }
+
+            Action::CopyToClipboard(text) => {
+                let mut clipboard = Clipboard::new()
+                    .map_err(|e| anyhow::anyhow!("Failed to open clipboard: {}", e))?;
+                clipboard.set_text(&text)
+                    .map_err(|e| anyhow::anyhow!("Failed to write to clipboard: {}", e))?;
+                println!("Copied to clipboard: {}", text);
+                Ok(())
+            }
         }
     }
 
@@ -144,6 +155,11 @@ impl ActionHandler {
         } else {
             Self::execute(item)
         }
+    }
+
+    pub fn copy_action_for(item: &LauncherItem) -> Action {
+        let text = item.path.clone().unwrap_or_else(|| item.title.clone());
+        Action::CopyToClipboard(text)
     }
 }
 
