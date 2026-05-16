@@ -705,16 +705,16 @@ impl Launcher {
     }
 }
 
-// fn launcher_theme(_state: &Launcher) -> Theme {
-//     Theme::Dark
-// }
+fn launcher_theme(_state: &Launcher) -> Theme {
+    Theme::Dark
+}
 
 fn main() -> iced::Result {
     tracing_subscriber::fmt::init();
 
     iced::application(Launcher::new, Launcher::update, Launcher::view)
         .title("Nanocast")
-        // .theme(launcher_theme)
+        .theme(launcher_theme)
         .subscription(Launcher::subscription)
         .window(iced::window::Settings {
             size: iced::Size::new(CONFIG.window.width, CONFIG.window.height),

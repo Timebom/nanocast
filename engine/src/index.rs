@@ -149,6 +149,7 @@ impl IndexBuilder {
         Ok(())
     }
 
+    #[cfg(target_os = "macos")]
     fn index_applications(&self, base_path: &str, items: &mut Vec<LauncherItem>) -> Result<()> {
         let path = Path::new(base_path);
         if !path.exists() {
