@@ -296,21 +296,37 @@ impl Launcher {
         // Window 500px - search input (~80px) - padding(~40px) = ~380px visible
         // 380px / 70px per item ~= 5 visible items
         const ITEM_HEIGHT: f32 = 70.0;
-        let scrollable_height = CONFIG.window.height - 56.0 - 16.0 - 40.0;
-        let visible_items = (scrollable_height / ITEM_HEIGHT).floor() as usize;
+        const PADDING_TOP: f32 = 16.0;
+        const INPUT_AREA: f32 = 88.0;
+        const FOOTER_HEIGHT: f32 = 50.0;
 
+        let scrollable_height = CONFIG.window.height - INPUT_AREA - FOOTER_HEIGHT - PADDING_TOP * 2.0;
+        if scrollable_height <= 0.0 || self.results.is_empty() {
+            return iced::Task::none();
+        }
+
+        let visible_items = (scrollable_height / ITEM_HEIGHT).floor() as usize;
+        let total_results = self.results.len();
         let scroll_y = if self.selected < visible_items {
             0.0
+        } else if self.selected < visible_items.saturating_sub(2) {
+            0.0
+        } else if self.selected > total_results.saturating_sub(visible_items.saturating_sub(2)) {
+            (total_results as f32 * ITEM_HEIGHT - scrollable_height).max(0.0)
         } else {
-            let max_scroll = (self.results.len() as f32 * ITEM_HEIGHT - scrollable_height).max(0.0);
-            let desired = (self.selected - visible_items + 1) as f32 * ITEM_HEIGHT;
-            desired.min(max_scroll)
+            let target_position = (self.selected as f32 * ITEM_HEIGHT) - (scrollable_height * 0.25).max(40.0);
+            target_position.max(0.0)
         };
 
-        // let offset = (self.selected as f32 * 70.0).max(0.0);
+        let max_scroll = (total_results as f32 * ITEM_HEIGHT - scrollable_height).max(0.0);
+        let final_scroll_y = scroll_y.min(max_scroll);
+
         operation::scroll_to(
             SCROLLABLE_ID.clone(),
-            scrollable::AbsoluteOffset { x: 0.0, y: scroll_y },
+            scrollable::AbsoluteOffset {
+                x: 0.0,
+                y: final_scroll_y,
+            },
         )
     }
 
