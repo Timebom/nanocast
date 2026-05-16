@@ -28,6 +28,7 @@ use iced::{
 use engine::{
     Action,
     ActionHandler,
+    CalculatorEngine,
     Config,
     IndexBuilder,
     SearchEngine,
@@ -82,6 +83,7 @@ pub struct Launcher {
     pending_shortcut: Option<Action>,
     mode: InputMode,
     command_state: Option<CommandModeState>,
+    calc_result: Option<String>,
 }
 
 impl Launcher {
@@ -114,6 +116,7 @@ impl Launcher {
             pending_shortcut: None,
             mode: InputMode::Normal,
             command_state: None,
+            calc_result: None,
         };
         app.update_results();
         let init_task = window::oldest().map(Message::WindowIdFound);
@@ -177,6 +180,13 @@ impl Launcher {
                         eprintln!("Shortcut execution error: {}", e);
                     }
                 } else if let Some(result) = self.results.get(self.selected) {
+                    if result.item.id.contains("calc:") {
+                        let copy_action = ActionHandler::copy_action_for(&result.item);
+                        if let Err(e) = ActionHandler::execute_shortcut(copy_action) {
+                            eprintln!("Calc copy error: {}", e);
+                        }
+                        return iced::Task::done(Message::Hide);
+                    }
                     println!("Executing: {}", result.item.title);
                     if let Err(e) = ActionHandler::execute(&result.item) {
                         eprintln!("Action execution error: {}", e);
@@ -305,6 +315,8 @@ impl Launcher {
     }
 
     fn update_results(&mut self) {
+        self.calc_result = None;
+
         if self.mode == InputMode::Command {
             if let Some(cs) = &self.command_state {
                 let hint = cs.slot_hint();
@@ -324,6 +336,30 @@ impl Launcher {
                 }]
             }
             return;
+        }
+
+        let q = self.query.trim();
+        if !q.is_empty() && CalculatorEngine::looks_like_math(q) {
+            if let Some(result_str) = CalculatorEngine::evaluate(q) {
+                self.calc_result = Some(result_str.clone());
+                let calc_item = SearchResult {
+                    item: LauncherItem {
+                        id: format!("calc:{}", q),
+                        title: format!("= {}", result_str),
+                        subtitle: Some(format!("{} -> {}", q, result_str)),
+                        path: Some(format!("{}", result_str)),
+                        icon_path: None,
+                        item_type: engine::ItemType::Command,
+                        tags: vec!["calc".into()],
+                    },
+                    score: 100.0
+                };
+                let mut rest = self.search_engine.search(q);
+                rest.retain(|r| !r.item.id.starts_with("calc:"));
+                self.results = std::iter::once(calc_item).chain(rest).collect();
+                self.selected = 0;
+                return;
+            }
         }
 
         if let Some(shortcut) = self.shortcut_engine.detect(&self.query) {
@@ -433,6 +469,53 @@ impl Launcher {
                 .fold(Column::new().spacing(4), |col, (i, result)| {
                     let is_selected = i == self.selected;
 
+                    if i == 0 {
+                        if let Some(ref calc_val) = self.calc_result {
+                            let expr_text = self.query.trim();
+                            let bg_color = if is_selected {
+                                Color::from_rgba(0.15, 0.55, 0.35, 0.85)
+                            } else {
+                                Color::from_rgba(0.10, 0.38, 0.24, 0.75)
+                            };
+                            let card = container(
+                                column![
+                                    text(calc_val.as_str())
+                                        .size(36)
+                                        .style(|_| text::Style {
+                                            color: Some(Color::from_rgb(0.55, 1.0, 0.72)),
+                                        }),
+                                    text(format!("{} = {}", expr_text, calc_val))
+                                        .size(13)
+                                        .style(|_| text::Style {
+                                            color: Some(Color::from_rgba(0.7, 0.95, 0.8, 0.7)),
+                                        }),
+                                    text(if is_selected { "⏎ copied to clipboard" } else { "Enter to copy result" })
+                                        .size(11)
+                                        .style(|_| text::Style {
+                                            color: Some(Color::from_rgba(0.55, 0.85, 0.65, 0.55)),
+                                        }),
+                                ]
+                                .spacing(4),
+                            )
+                            .padding([14, 18])
+                            .width(Length::Fill)
+                            .style(move |_| container::Style {
+                                background: Some(iced::Background::Color(bg_color)),
+                                border: iced::Border {
+                                    radius: 10.0.into(),
+                                    width: if is_selected { 1.5 } else { 1.0 },
+                                    color: if is_selected {
+                                        Color::from_rgba(0.3, 0.9, 0.55, 0.6)
+                                    } else {
+                                        Color::from_rgba(0.2, 0.65, 0.4, 0.35)
+                                    },
+                                },
+                                ..Default::default()
+                            });
+                            return col.push(card);
+                        }
+                    }
+
                     let icon_widget: Element<_> = match &result.item.icon_path {
                         Some(path) if path.ends_with(".svg") => svg(path)
                             .width(32)
@@ -498,6 +581,13 @@ impl Launcher {
                 .size(14)
                 .style(|_| text::Style {
                     color: Some(Color::from_rgb(0.6, 0.6, 0.65))
+                })
+                .into()
+        } else if self.calc_result.is_some() {
+            text("↑↓ select | Enter -> copy result | Ctrl+C copy path | Esc hide")
+                .size(14)
+                .style(|_| text::Style {
+                    color: Some(Color::from_rgb(0.45, 0.8, 0.6))
                 })
                 .into()
         } else {
