@@ -13,6 +13,7 @@ pub enum Action {
     RunCommand(String),
     Custom(String, Vec<String>),
     CopyToClipboard(String),
+    Quit,
 }
 
 pub struct ActionHandler;
@@ -147,6 +148,11 @@ impl ActionHandler {
                 println!("Copied to clipboard: {}", text);
                 Ok(())
             }
+
+            Action::Quit => {
+                println!("Quitting Nanocast...");
+                std::process::exit(0);
+            }
         }
     }
 
@@ -233,6 +239,20 @@ impl CalculatorEngine {
 }
 
 pub fn create_special_item(query: &str) -> Option<LauncherItem> {
+    let q = query.trim().to_lowercase();
+
+    if q == "quit" || q == "exit" || q == "kill" || q == "bye" {
+        return Some(LauncherItem {
+            id: "special:quit".into(),
+            title: "Quit Nanocast".into(),
+            subtitle: Some("Exit the launcher".into()),
+            path: None,
+            icon_path: None,
+            item_type: ItemType::Command,
+            tags: vec!["system".into(), "quit".into()],
+        });
+    }
+
     if query.starts_with("http") || query.contains(".com") || query.contains(".org") {
         let web_url = query.split("//").last().expect("Not a URL");
         return Some(LauncherItem {

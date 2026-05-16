@@ -13,6 +13,7 @@ use iced::{
         operation,
         image,
         svg,
+        mouse_area,
         Id,
         Column,
     },
@@ -61,6 +62,7 @@ enum Message {
     WindowIdFound(Option<window::Id>),
     WindowUnfocused,
     Tab,
+    ClickSelect(usize),
     Ignored,
 }
 
@@ -180,6 +182,12 @@ impl Launcher {
                         eprintln!("Shortcut execution error: {}", e);
                     }
                 } else if let Some(result) = self.results.get(self.selected) {
+                    if result.item.id == "special:quit" {
+                        if let Err(e) = ActionHandler::execute_shortcut(Action::Quit) {
+                            eprintln!("Quit error: {}", e);
+                        }
+                        return iced::Task::done(Message::Hide);
+                    }
                     if result.item.id.contains("calc:") {
                         let copy_action = ActionHandler::copy_action_for(&result.item);
                         if let Err(e) = ActionHandler::execute_shortcut(copy_action) {
@@ -281,6 +289,9 @@ impl Launcher {
                         }
                     }
                 }
+            }
+            Message::ClickSelect(index) => {
+                self.selected = index.min(self.results.len().saturating_sub(1));
             }
             Message::Ignored => {}
         }
@@ -582,7 +593,12 @@ impl Launcher {
                             },
                             ..Default::default()
                         });
-                    col.push(item)
+
+                    let clickable_item = mouse_area(item)
+                        .on_press(Message::ClickSelect(i))
+                        .on_double_click(Message::Execute);
+
+                    col.push(clickable_item)
                 })
                 .into()
         };
