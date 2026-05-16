@@ -23,6 +23,7 @@ use iced::{
     Color,
     Theme,
     Subscription,
+    Length
 };
 use engine::{
     Action,
@@ -394,7 +395,7 @@ impl Launcher {
         let mode_badge: Element<_> = if let Some(label) = input_label {
             container(
                 text(label)
-                    .size(16)
+                    .size(14)
                     .style(|_| text::Style {
                         color: Some(Color::from_rgb(0.4, 0.75, 1.0)),
                     }),
@@ -464,7 +465,7 @@ impl Launcher {
 
                     let item = container(content)
                         .padding(12)
-                        .width(iced::Length::Fill)
+                        .width(Length::Fill)
                         .style(move |_theme| container::Style {
                             background: Some(iced::Background::Color(bg_color)),
                             border: iced::Border {
@@ -478,26 +479,49 @@ impl Launcher {
                 .into()
         };
 
-        let footer = row![mode_badge]
+        let body = scrollable(results_list)
+            .id(SCROLLABLE_ID.clone())
+            .spacing(4)
+            .height(Length::Fill);
+
+        let footer_hints: Element<_> = if self.mode == InputMode::Command {
+            text("Tab -> next slot | Enter -> execute | Esc -> cancel")
+                .size(14)
+                .style(|_| text::Style {
+                    color: Some(Color::from_rgb(0.6, 0.6, 0.65))
+                })
+                .into()
+        } else {
+            text("↑↓ select  |  Enter execute  |  Tab on shortcut → command mode  |  Esc hide")
+                .size(14)
+                .style(|_| text::Style {
+                    color: Some(Color::from_rgb(0.6, 0.6, 0.65))
+                })
+                .into()
+        };
+
+        let footer = row![
+            mode_badge,
+            iced::widget::space::horizontal().width(Length::Fill),
+            footer_hints,
+        ]
             .align_y(Alignment::Center)
-            .width(iced::Length::Fill)
+            .width(Length::Fill)
             .spacing(12);
+
 
         container(
             column![
                 input,
-                scrollable(results_list)
-                    .id(SCROLLABLE_ID.clone())
-                    .spacing(4)
-                    .height(iced::Length::Fill),
+                body,
                 footer
             ]
-                .spacing(16)
-                .padding(20)
-                .width(iced::Length::Fill)
+                .spacing(14)
+                .padding(16)
+                .width(Length::Fill)
         )
-        .width(iced::Length::Fixed(CONFIG.window.width))
-        .height(iced::Length::Fixed(CONFIG.window.height))
+        .width(Length::Fixed(CONFIG.window.width))
+        .height(Length::Fixed(CONFIG.window.height))
         .clip(true)
         .style(|_theme| container::Style {
             background: Some(iced::Background::Color(iced::Color::from_rgba(0.08, 0.08, 0.10, 0.97))),

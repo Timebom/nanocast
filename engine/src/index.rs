@@ -129,7 +129,7 @@ impl IndexBuilder {
                     .unwrap_or_else(|| name.clone());
 
                 items.push(LauncherItem {
-                    id: format!("desktop:{}", p.to_string_lossy()),
+                    id: format!("app:{}", p.to_string_lossy()),
                     title: name,
                     subtitle: Some("Application".to_string()),
                     path: Some(exec),
