@@ -8,7 +8,6 @@ name = "nanocast"
 path = "src/main.rs"
 
 [dependencies]
-global-hotkey = "0.8.0"
 engine = { path = "../engine" }
 iced = { version = "0.14", features = ["wgpu", "tokio", "image", "svg"] }
 anyhow = { workspace = true }

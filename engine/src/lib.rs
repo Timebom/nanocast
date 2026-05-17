@@ -4,6 +4,7 @@ pub mod search;
 pub mod actions;
 pub mod index;
 pub mod shortcuts;
+pub mod hotkey;
 
 pub use config::{Config, HotkeyConfig, IndexConfig, WindowConfig};
 pub use models::*;

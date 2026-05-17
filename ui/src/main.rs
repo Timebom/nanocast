@@ -39,10 +39,9 @@ use engine::{
     create_special_item
 };
 use engine::shortcuts::CommandModeState;
+use engine::hotkey;
 use tracing_subscriber;
 use std::sync::LazyLock;
-
-mod hotkey;
 
 static INPUT_ID: LazyLock<Id> = LazyLock::new(Id::unique);
 static SCROLLABLE_ID: LazyLock<Id> = LazyLock::new(Id::unique);
@@ -655,16 +654,11 @@ impl Launcher {
         .height(Length::Fixed(CONFIG.window.height))
         .clip(true)
         .style(|_theme| container::Style {
-            background: Some(iced::Background::Color(iced::Color::from_rgba(0.08, 0.08, 0.10, 0.97))),
+            background: Some(iced::Background::Color(iced::Color::from_rgba(0.08, 0.08, 0.10, 0.99))),
             border: iced::Border {
                 radius: 20.0.into(),
                 width: 1.0,
                 color: Color::from_rgba(1.0, 1.0, 1.0, 0.1)
-            },
-            shadow: iced::Shadow {
-                color: Color::BLACK,
-                offset: iced::Vector::new(0.0, 10.0),
-                blur_radius: 30.0,
             },
             ..Default::default()
         })
@@ -706,7 +700,10 @@ impl Launcher {
 }
 
 fn launcher_theme(_state: &Launcher) -> Theme {
-    Theme::Dark
+    Theme::custom("Transparent", iced::theme::Palette {
+        background: Color::TRANSPARENT,
+        ..Theme::Dark.palette()
+    })
 }
 
 fn main() -> iced::Result {
