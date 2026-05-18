@@ -49,8 +49,8 @@ cd nanocast/ui
 cargo run --release
 ```
 
-##Pre-built Binaries
-- Linux: Download ```Nanocast-x86_64.AppImage``` from the latest release
+## Pre-built Binaries
+- Linux: Coming soon
 - macOS: Coming soon
 
 ## Usage
