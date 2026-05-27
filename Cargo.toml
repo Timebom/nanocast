@@ -8,10 +8,15 @@ readme = "README.md"
 repository = "https://github.com/Timebom/nanocast"
 
 [dependencies]
+engine = { path = "engine" }
+tokio = { version = "1", features = ["time"] }
+iced = { version = "0.14", features = ["wgpu", "tokio", "image", "svg"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [workspace]
-members = ["engine", "ui"]
-resolver = "2"
+members = ["engine"]
+resolver = "1"
 
 [workspace.dependencies]
 serde = { version = "^1.0", features = ["derive"] }

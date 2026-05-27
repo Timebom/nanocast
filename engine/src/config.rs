@@ -1,7 +1,29 @@
 use anyhow;
 use dirs;
-use toml;
 use serde::{Deserialize, Serialize};
+use toml;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Platform {
+    MacOS,
+    Linux,
+    Windows,
+}
+
+impl Platform {
+    pub const fn current() -> Self {
+        #[cfg(target_os = "macos")]
+        return Platform::MacOS;
+        #[cfg(target_os = "linux")]
+        return Platform::Linux;
+        #[cfg(target_os = "windows")]
+        return Platform::Windows;
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        return Platform::Linux;
+    }
+}
+
+pub const PLATFORM: Platform = Platform::current();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -29,7 +51,7 @@ pub struct IndexConfig {
 
     pub applications_paths: Vec<String>,
     pub file_paths: Vec<String>,
-    pub ignored_patterns: Vec<String>
+    pub ignored_patterns: Vec<String>,
 }
 
 impl Default for IndexConfig {
@@ -38,19 +60,43 @@ impl Default for IndexConfig {
             index_applications: true,
             index_files: true,
             index_folders: false,
-            applications_paths: vec![
-                "/Applications".to_string(),
-                "~/Applications".to_string(),
-                "/usr/share/applications".to_string(),
-                "/usr/local/share/applications".to_string(),
-                "~/.local/share/applications".to_string(),
-            ],
-            file_paths: vec![
-                "~/Downloads".to_string(),
-                "~/Documents".to_string(),
-                "~/Pictures".to_string(),
-                "~/Music".to_string()
-            ],
+            applications_paths: match PLATFORM {
+                Platform::MacOS => vec![
+                    "/Applications".to_string(),
+                    "~/Applications".to_string(),
+                    "/System/Applications".to_string(),
+                    "/System/Library/CoreServices".to_string(),
+                ],
+                Platform::Linux => vec![
+                    "/usr/share/applications".to_string(),
+                    "/usr/local/share/applications".to_string(),
+                    "~/.local/share/applications".to_string(),
+                ],
+                Platform::Windows => vec![
+                    // TODO: Windows Applications Source
+                ],
+            },
+            file_paths: match PLATFORM {
+                Platform::MacOS => vec![
+                    "~/Downloads".to_string(),
+                    "~/Documents".to_string(),
+                    "~/Desktop".to_string(),
+                    "~/Pictures".to_string(),
+                    "~/Movies".to_string(),
+                    "~/Music".to_string(),
+                ],
+                Platform::Linux => vec![
+                    "~/Downloads".to_string(),
+                    "~/Documents".to_string(),
+                    "~/Desktop".to_string(),
+                    "~/Pictures".to_string(),
+                    "~/Videos".to_string(),
+                    "~/Music".to_string(),
+                ],
+                Platform::Windows => vec![
+                    // TODO: Windows Files Source
+                ],
+            },
             ignored_patterns: vec![
                 "/sys".to_string(),
                 "/tmp".to_string(),
@@ -58,8 +104,10 @@ impl Default for IndexConfig {
                 "/proc".to_string(),
                 "/boot".to_string(),
                 ".git".to_string(),
-                "node_modules".to_string()
-            ]
+                "node_modules".to_string(),
+                "Library/Caches".to_string(),
+                "Library/Logs".to_string(),
+            ],
         }
     }
 }
@@ -72,9 +120,11 @@ pub struct HotkeyConfig {
 
 impl Default for HotkeyConfig {
     fn default() -> Self {
-        let is_macos = cfg!(target_os = "macos");
         Self {
-            modifiers: if is_macos { "Meta".to_string() } else { "Control".to_string() },
+            modifiers: match PLATFORM {
+                Platform::MacOS => "Meta".to_string(),
+                _ => "Control".to_string(),
+            },
             key: "Space".to_string(),
         }
     }
@@ -135,7 +185,7 @@ impl Default for Config {
                     action_type: "open_url".into(),
                     command: Some("https://youtube.com/results?search_query={query}".into()),
                     icon: None,
-                    key: Some("ctrl+y".to_string())
+                    key: Some("ctrl+y".to_string()),
                 },
                 ShortcutConfig {
                     trigger: "calc".into(),
@@ -143,7 +193,7 @@ impl Default for Config {
                     action_type: "calculator".into(),
                     command: None,
                     icon: None,
-                    key: None
+                    key: None,
                 },
                 ShortcutConfig::default(),
             ],
@@ -171,7 +221,8 @@ impl Config {
 
             let default_shortcuts = Config::default().shortcuts;
             for default_sc in default_shortcuts {
-                let already_defined = config.shortcuts
+                let already_defined = config
+                    .shortcuts
                     .iter()
                     .any(|sc| sc.trigger == default_sc.trigger);
 
@@ -183,10 +234,8 @@ impl Config {
         }
     }
 
-    pub fn save(&self) ->  anyhow::Result<()> {
-        let config_path = dirs::config_dir()
-            .unwrap()
-            .join("nanocast/config.toml");
+    pub fn save(&self) -> anyhow::Result<()> {
+        let config_path = dirs::config_dir().unwrap().join("nanocast/config.toml");
         std::fs::write(config_path, toml::to_string_pretty(self)?)?;
         Ok(())
     }

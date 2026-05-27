@@ -1,9 +1,9 @@
-use crate::config::Config;
-use crate::models::{LauncherItem, ItemType};
+use crate::config::{Config, PLATFORM, Platform};
+use crate::models::{ItemType, LauncherItem};
 use anyhow::Result;
+use shellexpand::tilde;
 use std::path::Path;
 use walkdir::WalkDir;
-use shellexpand::tilde;
 
 pub struct IndexBuilder {
     config: Config,
@@ -11,28 +11,28 @@ pub struct IndexBuilder {
 
 impl IndexBuilder {
     pub fn new(config: Config) -> Self {
-        Self {
-            config
-        }
+        Self { config }
     }
 
     pub fn build(&self) -> Result<Vec<LauncherItem>> {
         let mut items = Vec::new();
 
-        #[cfg(target_os = "linux")]
-        {
-            if self.config.index.index_applications {
-                self.index_linux_desktop_files(&mut items)?;
+        // Applications
+        if self.config.index.index_applications {
+            match PLATFORM {
+                Platform::MacOS => {
+                    self.index_macos_applications(&mut items)?;
+                }
+                Platform::Linux => {
+                    self.index_linux_desktop_files(&mut items)?;
+                }
+                Platform::Windows => {
+                    // TODO: Windows Application support
+                }
             }
         }
 
-        #[cfg(target_os = "macos")]
-        {
-            if self.config.index.index_applications {
-                self.index_macos_applications(&mut items)?;
-            }
-        }
-
+        // Files/Folders
         if self.config.index.index_files {
             for path in &self.config.index.file_paths {
                 let expanded = tilde(path);
@@ -40,9 +40,13 @@ impl IndexBuilder {
             }
         }
 
+        // Shortcuts
         let shortcut_engine = crate::shortcuts::ShortcutEngine::new(&self.config);
-        items.extend(shortcut_engine.all_shortcuts().iter().map(|sc| {
-                LauncherItem {
+        items.extend(
+            shortcut_engine
+                .all_shortcuts()
+                .iter()
+                .map(|sc| LauncherItem {
                     id: format!("shortcut:{}", sc.trigger),
                     title: format!("{} -> {}", sc.trigger, sc.name),
                     subtitle: Some(format!("Shortcut: {}", sc.action_type)),
@@ -50,29 +54,21 @@ impl IndexBuilder {
                     icon_path: sc.icon.clone(),
                     item_type: ItemType::default(),
                     tags: vec!["shortcut".into()],
-                }
-            })
+                }),
         );
 
-        // Remove duplicates by path
+        // Remove duplicates by path and sort
         items.sort_by_key(|i| i.path.clone());
         items.dedup_by_key(|i| i.path.clone());
 
         Ok(items)
     }
 
-    #[cfg(target_os = "linux")]
     fn index_linux_desktop_files(&self, items: &mut Vec<LauncherItem>) -> Result<()> {
-        use freedesktop_file_parser::{parse, EntryType};
+        use freedesktop_file_parser::{EntryType, parse};
         use freedesktop_icons::lookup;
 
-        let desktop_dirs = vec![
-            "/usr/share/applications",
-            "/usr/local/share/applications",
-            "~/.local/share/applications",
-        ];
-
-        for dir in desktop_dirs {
+        for dir in &self.config.index.applications_paths {
             let path = tilde(dir).into_owned();
             let dir_path = Path::new(&path);
             if !dir_path.exists() {
@@ -104,17 +100,19 @@ impl IndexBuilder {
                     _ => continue,
                 };
 
-                if desktop.entry.no_display.unwrap_or(false) || desktop.entry.hidden.unwrap_or(false) {
+                if desktop.entry.no_display.unwrap_or(false)
+                    || desktop.entry.hidden.unwrap_or(false)
+                {
                     continue;
                 }
 
                 let name = desktop.entry.name.default;
 
-                let exec = app.exec
-                    .or(app.try_exec)
-                    .unwrap_or_default();
+                let exec = app.exec.or(app.try_exec).unwrap_or_default();
 
-                let icon = desktop.entry.icon
+                let icon = desktop
+                    .entry
+                    .icon
                     .map(|i| i.content)
                     .unwrap_or_else(|| "assets/icons/icon.png".into());
 
@@ -124,7 +122,9 @@ impl IndexBuilder {
                     .find()
                     .map(|p| p.to_string_lossy().to_string());
 
-                let tag = desktop.entry.generic_name
+                let tag = desktop
+                    .entry
+                    .generic_name
                     .map(|g| g.default)
                     .unwrap_or_else(|| name.clone());
 
@@ -144,40 +144,95 @@ impl IndexBuilder {
 
     #[cfg(target_os = "macos")]
     fn index_macos_applications(&self, items: &mut Vec<LauncherItem>) -> Result<()> {
-        self.index_applications("/Applications", items)?;
-        self.index_applications("~/Applications", items)?;
+        for dir in &self.config.index.applications_paths {
+            let expanded = tilde(dir).into_owned();
+            let path = Path::new(&expanded);
+            if !path.exists() {
+                return Ok(());
+            }
+
+            for entry in WalkDir::new(path)
+                .max_depth(1)
+                .follow_links(false)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                let p = entry.path();
+                if p.extension().and_then(|s| s.to_str()) != Some("app") {
+                    continue;
+                }
+                let (display_name, icon_file) = self.parse_macos_info_plist(p);
+                let title = display_name.unwrap_or_else(|| {
+                    p.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Unknown")
+                        .to_string()
+                });
+                let icon_path = if let Some(icon_name) = icon_file {
+                    let resources = p.join("Contents/Resources");
+                    let full_icon_path = resources.join(icon_name);
+                    if full_icon_path.exists() {
+                        Some(full_icon_path.to_string_lossy().to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                items.push(LauncherItem {
+                    id: format!("app:{}", p.to_string_lossy()),
+                    title: title,
+                    subtitle: Some("Application".to_string()),
+                    path: Some(p.to_string_lossy().to_string()),
+                    icon_path: icon_path,
+                    item_type: ItemType::Application,
+                    tags: vec!["app".into()],
+                });
+            }
+        }
+
         Ok(())
     }
 
+    // Parse Info.plist to get accurate app name and icon file name
     #[cfg(target_os = "macos")]
-    fn index_applications(&self, base_path: &str, items: &mut Vec<LauncherItem>) -> Result<()> {
-        let path = Path::new(base_path);
-        if !path.exists() {
-            return Ok(());
+    fn parse_macos_info_plist(&self, app_path: &Path) -> (Option<String>, Option<String>) {
+        let plist_path = app_path.join("Contents/Info.plist");
+        if !plist_path.exists() {
+            return (None, None);
         }
 
-        for entry in WalkDir::new(path)
-            .max_depth(1)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let p = entry.path();
-            if p.extension().and_then(|s| s.to_str()) == Some("app") {
-                if let Some(name) = p.file_stem().and_then(|s| s.to_str()) {
-                    items.push(LauncherItem {
-                        id: format!("app:{}", p.to_string_lossy()),
-                        title: name.to_string(),
-                        subtitle: Some("Application".to_string()),
-                        path: Some(p.to_string_lossy().to_string()),
-                        icon_path: Some(format!("{}/Contents/Resources/AppIcon.icns", p.display())),
-                        item_type: ItemType::Application,
-                        tags: vec!["app".into()]
+        match plist::Value::from_file(&plist_path) {
+            Ok(value) => {
+                let dict = match value.as_dictionary() {
+                    Some(d) => d,
+                    None => return (None, None),
+                };
+
+                // Get display name (better than folder name)
+                let display_name = dict
+                    .get("CFBundleDisplayName")
+                    .or_else(|| dict.get("CFBundleName"))
+                    .and_then(|v| v.as_string())
+                    .map(|s| s.to_string());
+
+                // Get icon file name
+                let icon_name = dict
+                    .get("CFBundleIconFile")
+                    .and_then(|v| v.as_string())
+                    .map(|s| {
+                        let mut name = s.to_string();
+                        if !name.ends_with(".icns") {
+                            name.push_str(".icns");
+                        }
+                        name
                     });
-                }
+
+                (display_name, icon_name)
             }
+            Err(_) => (None, None),
         }
-        Ok(())
     }
 
     fn index_files(&self, base_path: &str, items: &mut Vec<LauncherItem>) -> Result<()> {
@@ -203,13 +258,15 @@ impl IndexBuilder {
                 items.push(LauncherItem {
                     id: format!("file:{}", p.to_string_lossy()),
                     title: name.to_string(),
-                    subtitle: Some(p.parent()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default()),
+                    subtitle: Some(
+                        p.parent()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_default(),
+                    ),
                     path: Some(p.to_string_lossy().to_string()),
                     icon_path: None,
                     item_type: ItemType::File,
-                    tags: vec![]
+                    tags: vec![],
                 });
             }
         }
@@ -217,7 +274,11 @@ impl IndexBuilder {
     }
 
     fn should_ignore(&self, name: &str) -> bool {
-        self.config.index.ignored_patterns.iter().any(|pat| name.contains(pat))
+        self.config
+            .index
+            .ignored_patterns
+            .iter()
+            .any(|pat| name.contains(pat))
     }
 
     pub fn build_demo_index() -> Vec<LauncherItem> {
@@ -253,7 +314,11 @@ impl IndexBuilder {
 
         if let Some(home) = dirs::home_dir() {
             let downloads = home.join("Downloads");
-            for entry in WalkDir::new(downloads).max_depth(2).into_iter().filter_map(|e| e.ok()) {
+            for entry in WalkDir::new(downloads)
+                .max_depth(2)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
                 if let Some(name) = entry.file_name().to_str() {
                     if name.ends_with(".pdf") || name.ends_with(".txt") {
                         items.push(LauncherItem {
@@ -263,7 +328,7 @@ impl IndexBuilder {
                             path: Some(entry.path().to_string_lossy().into()),
                             icon_path: None,
                             item_type: ItemType::File,
-                            tags: vec![]
+                            tags: vec![],
                         });
                     }
                 }
