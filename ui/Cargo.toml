@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 engine = { path = "../engine" }
+tokio = { version = "1", features = ["time"] }
 iced = { version = "0.14", features = ["wgpu", "tokio", "image", "svg"] }
 anyhow = { workspace = true }
 tracing = "0.1.44"

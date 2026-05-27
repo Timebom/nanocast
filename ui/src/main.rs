@@ -59,6 +59,7 @@ enum Message {
     PollHotkey,
     HotkeyTriggered,
     WindowIdFound(Option<window::Id>),
+    RetryWindowId,
     WindowUnfocused,
     Tab,
     ClickSelect(usize),
@@ -218,7 +219,17 @@ impl Launcher {
                 self.selected = 0;
                 self.pending_shortcut = None;
                 if let Some(id) = self.window_id {
-                    return window::set_mode(id, window::Mode::Hidden);
+                    #[cfg(target_os = "linux")]
+                    {
+                        return Task::batch([
+                            window::set_level(id, window::Level::Normal),
+                            window::minimize(id, true)
+                        ]);
+                    }
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        return window::set_mode(id, window::Mode::Hidden);
+                    }
                 }
             }
             Message::Show => {
@@ -230,11 +241,24 @@ impl Launcher {
                 self.selected = 0;
                 self.pending_shortcut = None;
                 if let Some(id) = self.window_id {
-                    return Task::batch([
-                        window::set_mode(id, window::Mode::Windowed),
-                        window::gain_focus(id),
-                        operation::focus(INPUT_ID.clone()),
-                    ]);
+                    #[cfg(target_os = "linux")]
+                    {
+                        return Task::batch([
+                            window::set_mode(id, window::Mode::Windowed),
+                            window::set_level(id, window::Level::AlwaysOnTop),
+                            window::minimize(id, false),
+                            window::gain_focus(id),
+                            operation::focus(INPUT_ID.clone()),
+                        ]);
+                    }
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        return Task::batch([
+                            window::set_mode(id, window::Mode::Windowed),
+                            window::gain_focus(id),
+                            operation::focus(INPUT_ID.clone()),
+                        ]);
+                    }
                 };
             }
             Message::PollHotkey => {
@@ -248,14 +272,27 @@ impl Launcher {
                 return iced::Task::done(Message::Show);
             }
             Message::WindowIdFound(id) => {
-                self.window_id = id;
-                if let Some(id) = self.window_id {
-                    return window::set_mode(id, window::Mode::Hidden);
+                if id.is_some() {
+                    self.window_id = id;
+                    if let Some(id) = self.window_id {
+                        return window::set_mode(id, window::Mode::Hidden);
+                    }
+                } else {
+                    // Retry after short delay
+                    return Task::perform(
+                        async {
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        },
+                        |_| Message::RetryWindowId,
+                    );
                 }
+            }
+            Message::RetryWindowId => {
+                return window::oldest().map(Message::WindowIdFound);
             }
             Message::WindowUnfocused => {
                 let too_soon = self.shown_at
-                    .map(|t| t.elapsed() < std::time::Duration::from_millis(150))
+                    .map(|t| t.elapsed() < std::time::Duration::from_millis(150)) // was 150ms
                     .unwrap_or(false);
 
                 if self.is_visible && !too_soon {
