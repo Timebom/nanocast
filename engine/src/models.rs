@@ -48,20 +48,17 @@ pub enum FilterMode {
     All,
     Applications,
     Files,
-    Folders,
     Shortcuts,
-    Web,
 }
 
 impl FilterMode {
+    #[warn(dead_code)]
     pub fn next(&self) -> Self {
         match self {
             Self::All => Self::Applications,
             Self::Applications => Self::Files,
-            Self::Files => Self::Folders,
-            Self::Folders => Self::Shortcuts,
-            Self::Shortcuts => Self::Web,
-            Self::Web => Self::All,
+            Self::Files => Self::Shortcuts,
+            Self::Shortcuts => Self::All,
         }
     }
 
@@ -70,9 +67,7 @@ impl FilterMode {
             Self::All => "All",
             Self::Applications => "Applications",
             Self::Files => "Files",
-            Self::Folders => "Folders",
             Self::Shortcuts => "Shortcuts",
-            Self::Web => "Web",
         }
     }
 }

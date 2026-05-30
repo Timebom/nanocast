@@ -72,9 +72,7 @@ impl SearchEngine {
             FilterMode::All => true,
             FilterMode::Applications => matches!(r.item.item_type, ItemType::Application),
             FilterMode::Files => matches!(r.item.item_type, ItemType::File),
-            FilterMode::Folders => matches!(r.item.item_type, ItemType::Folder),
             FilterMode::Shortcuts => r.item.id.starts_with("shortcut:"),
-            FilterMode::Web => matches!(r.item.item_type, ItemType::Url),
         });
 
         results

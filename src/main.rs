@@ -37,7 +37,6 @@ enum Message {
     Tab,
     ClickSelect(usize),
     SetFilter(FilterMode),
-    CycleFilter,
     LoadMore,
     Scrolled(scrollable::Viewport),
     Ignored,
@@ -47,6 +46,19 @@ enum Message {
 enum InputMode {
     Normal,
     Command,
+}
+
+#[derive(Debug, Clone)]
+struct FooterHint {
+    key: &'static str,
+    label: &'static str,
+    color: [f32; 3],
+}
+
+impl FooterHint {
+    const fn new(key: &'static str, label: &'static str, color: [f32; 3]) -> Self {
+        Self { key, label, color }
+    }
 }
 
 pub struct Launcher {
@@ -323,10 +335,6 @@ impl Launcher {
                 self.filter_mode = mode;
                 self.update_results();
             }
-            Message::CycleFilter => {
-                self.filter_mode = self.filter_mode.next();
-                self.update_results();
-            }
             Message::LoadMore => {
                 let total = self.results.len();
                 if self.visible_count < total {
@@ -492,6 +500,57 @@ impl Launcher {
         self.selected = 0;
     }
 
+    fn active_hints(&self) -> Vec<FooterHint> {
+        let mut hints = Vec::new();
+
+        match self.mode {
+            InputMode::Command => {
+                let has_more_slots = self
+                    .command_state
+                    .as_ref()
+                    .map(|c| c.active_slot < c.slots.len().saturating_sub(1))
+                    .unwrap_or(false);
+
+                if has_more_slots {
+                    hints.push(FooterHint::new("Tab", "next slot", [0.4, 0.75, 1.0]));
+                    hints.push(FooterHint::new("Enter", "execute", [0.4, 0.9, 0.55]));
+                    hints.push(FooterHint::new("Esc", "cancel", [0.85, 0.45, 0.45]));
+                } else {
+                    hints.push(FooterHint::new("Enter", "execute", [0.4, 0.9, 0.55]));
+                    hints.push(FooterHint::new("Esc", "cancel", [0.85, 0.45, 0.45]));
+                }
+            }
+            InputMode::Normal => {
+                let selected = self.results.get(self.selected);
+                let is_shortcut = selected
+                    .map(|r| r.item.id.starts_with("shortcut:"))
+                    .unwrap_or(false);
+
+                // Each branch is mutually exclusive - only one context active at a time
+                if self.calc_result.is_some() {
+                    hints.push(FooterHint::new("Enter", "copy result", [0.4, 0.9, 0.55]));
+                    hints.push(FooterHint::new("Esc", "hide", [0.55, 0.55, 0.6]));
+                } else if is_shortcut {
+                    hints.push(FooterHint::new("Enter", "run", [0.4, 0.9, 0.55]));
+                    hints.push(FooterHint::new("Tab", "fill slots", [0.4, 0.75, 1.0]));
+                    hints.push(FooterHint::new("Esc", "hide", [0.55, 0.55, 0.6]));
+                } else if self.results.is_empty() {
+                    hints.push(FooterHint::new("Esc", "hide", [0.55, 0.55, 0.6]));
+                } else {
+                    // Default: normal item selected
+                    hints.push(FooterHint::new("Enter", "open", [0.85, 0.85, 0.9]));
+                    hints.push(FooterHint::new("Esc", "hide", [0.55, 0.55, 0.6]));
+
+                    if selected.and_then(|r| r.item.path.as_ref()).is_some() {
+                        hints.insert(1, FooterHint::new("Ctrl+C", "copy", [0.75, 0.6, 0.9]));
+                    }
+                }
+            }
+        }
+
+        hints
+    }
+
     fn view(&self) -> Element<'_, Message> {
         let (placeholder, input_label) = match (&self.mode, &self.command_state) {
             (InputMode::Command, Some(cs)) => {
@@ -533,16 +592,10 @@ impl Launcher {
             ),
             (FilterMode::Files, "Files", "assets/icons/utility/files.svg"),
             (
-                FilterMode::Folders,
-                "Folders",
-                "assets/icons/utility/Folder.svg",
-            ),
-            (
                 FilterMode::Shortcuts,
                 "Shortcuts",
                 "assets/icons/utility/lighting.svg",
             ),
-            (FilterMode::Web, "Web", "assets/icons/utility/globe.svg"),
         ];
 
         for (mode, label, _) in filters.iter() {
@@ -737,33 +790,59 @@ impl Launcher {
             .id(SCROLLABLE_ID.clone())
             .on_scroll(Message::Scrolled)
             .spacing(4)
+            .direction(scrollable::Direction::Vertical(
+                scrollable::Scrollbar::hidden(),
+            ))
             .height(Length::Fill);
 
-        let footer_hints: Element<_> = if self.mode == InputMode::Command {
-            text("Tab -> next slot | Enter -> execute | Esc cancel")
-                .size(14)
-                .style(|_| text::Style {
-                    color: Some(Color::from_rgb(0.6, 0.6, 0.65)),
-                })
-                .into()
-        } else if self.calc_result.is_some() {
-            text("↑↓ select | Enter -> copy result | Ctrl+C copy path | Esc hide")
-                .size(14)
-                .style(|_| text::Style {
-                    color: Some(Color::from_rgb(0.45, 0.8, 0.6)),
-                })
-                .into()
+        let hints = self.active_hints();
+        let footer_hints: Element<_> = hints
+            .iter()
+            .enumerate()
+            .fold(
+                row![].spacing(10).align_y(Alignment::Center),
+                |row_acc, (i, hint)| {
+                    let key_badge = container(text(hint.key).size(12).style(|_| text::Style {
+                        color: Some(Color::from_rgb(0.85, 0.85, 0.9)),
+                    }))
+                    .padding([2, 4])
+                    .style(|_| container::Style {
+                        background: Some(iced::Background::Color(Color::from_rgba(
+                            1.0, 1.0, 1.0, 0.08,
+                        ))),
+                        border: iced::Border {
+                            radius: 4.0.into(),
+                            width: 0.5,
+                            color: Color::from_rgba(1.0, 1.0, 1.0, 0.15),
+                        },
+                        ..Default::default()
+                    });
+
+                    let [r, g, b] = hint.color;
+                    let label = text(hint.label).size(14).style(move |_| text::Style {
+                        color: Some(Color::from_rgb(r, g, b)),
+                    });
+
+                    // Separator dot between hints (not before the first)
+                    let mut r = row_acc.push(key_badge).push(label);
+                    if i < hints.len() - 1 {
+                        r = r.push(text("·").size(11).style(|_| text::Style {
+                            color: Some(Color::from_rgba(1.0, 1.0, 1.0, 0.2)),
+                        }));
+                    }
+                    r
+                },
+            )
+            .into();
+
+        let active_view: Element<_> = if self.mode == InputMode::Command {
+            mode_badge
         } else {
-            text("↑↓ select  |  Enter execute  | Ctrl+C copy |  Tab → command mode  |  Esc hide")
-                .size(14)
-                .style(|_| text::Style {
-                    color: Some(Color::from_rgb(0.6, 0.6, 0.65)),
-                })
-                .into()
+            filter_bar.into()
         };
 
         let footer = row![
-            mode_badge,
+            active_view,
             iced::widget::space::horizontal().width(Length::Fill),
             footer_hints,
         ]
@@ -772,8 +851,8 @@ impl Launcher {
         .spacing(12);
 
         container(
-            column![input, filter_bar, body, footer]
-                .spacing(14)
+            column![input, body, footer]
+                .spacing(12)
                 .padding(16)
                 .width(Length::Fill),
         )
@@ -810,8 +889,6 @@ impl Launcher {
                     Message::SetFilter(FilterMode::Applications)
                 }
                 Key::Named(keyboard::key::Named::F3) => Message::SetFilter(FilterMode::Files),
-                Key::Named(keyboard::key::Named::F4) => Message::SetFilter(FilterMode::Folders),
-                Key::Named(keyboard::key::Named::F5) => Message::SetFilter(FilterMode::Web),
                 _ => Message::Ignored,
             },
             _ => Message::Ignored,
