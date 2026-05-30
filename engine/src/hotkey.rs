@@ -1,21 +1,8 @@
+use crate::config::{Config, HotkeyConfig};
 use anyhow;
-use global_hotkey::{
-    GlobalHotKeyEvent,
-    GlobalHotKeyManager
-};
-use global_hotkey::hotkey::{
-    Code,
-    HotKey,
-    Modifiers
-};
-use crate::config::{
-    Config,
-    HotkeyConfig,
-};
-use std::sync::mpsc::{
-    Receiver,
-    channel,
-};
+use global_hotkey::hotkey::{Code, HotKey, Modifiers};
+use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
+use std::sync::mpsc::{Receiver, channel};
 
 pub struct HotkeyHandler {
     manager: GlobalHotKeyManager,

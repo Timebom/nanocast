@@ -1,8 +1,7 @@
-use std::result;
-use std::sync::Arc;
-use crate::models::{LauncherItem, SearchResult, FilterMode, ItemType};
-use nucleo::{Nucleo, Config};
+use crate::models::{FilterMode, ItemType, LauncherItem, SearchResult};
 use nucleo::pattern::{CaseMatching, Normalization};
+use nucleo::{Config, Nucleo};
+use std::sync::Arc;
 
 pub struct SearchEngine {
     items: Vec<LauncherItem>,
@@ -36,20 +35,19 @@ impl SearchEngine {
 
     pub fn search(&mut self, query: &str) -> Vec<SearchResult> {
         if query.trim().is_empty() {
-            return self.items.iter().take(50).map(|item| SearchResult {
-                item: item.clone(),
-                score: 0.0
-            })
-            .collect();
+            return self
+                .items
+                .iter()
+                .map(|item| SearchResult {
+                    item: item.clone(),
+                    score: 0.0,
+                })
+                .collect();
         }
 
-        self.matcher.pattern.reparse(
-            0,
-            query,
-            CaseMatching::Smart,
-            Normalization::Smart,
-            false
-        );
+        self.matcher
+            .pattern
+            .reparse(0, query, CaseMatching::Smart, Normalization::Smart, false);
 
         self.matcher.tick(10);
 

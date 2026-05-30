@@ -1,8 +1,8 @@
 use engine::hotkey;
 use engine::shortcuts::CommandModeState;
 use engine::{
-    Action, ActionHandler, CalculatorEngine, Config, IndexBuilder, LauncherItem, SearchEngine,
-    SearchResult, FilterMode, ShortcutEngine, create_special_item,
+    Action, ActionHandler, CalculatorEngine, Config, FilterMode, IndexBuilder, LauncherItem,
+    SearchEngine, SearchResult, ShortcutEngine, create_special_item,
 };
 use iced::{
     Alignment, Color, Element, Length, Subscription, Task, Theme,
@@ -38,6 +38,8 @@ enum Message {
     ClickSelect(usize),
     SetFilter(FilterMode),
     CycleFilter,
+    LoadMore,
+    Scrolled(scrollable::Viewport),
     Ignored,
 }
 
@@ -62,6 +64,7 @@ pub struct Launcher {
     command_state: Option<CommandModeState>,
     calc_result: Option<String>,
     filter_mode: FilterMode,
+    visible_count: usize,
 }
 
 impl Launcher {
@@ -96,6 +99,7 @@ impl Launcher {
             command_state: None,
             calc_result: None,
             filter_mode: FilterMode::default(),
+            visible_count: 20,
         };
         app.update_results();
         let init_task = window::oldest().map(Message::WindowIdFound);
@@ -137,6 +141,12 @@ impl Launcher {
             Message::SelectDown => {
                 if !self.results.is_empty() {
                     self.selected = (self.selected + 1).min(self.results.len() - 1);
+                    // Expand visible_count if selection is approaching the rendered bottom
+                    if self.selected + 3 >= self.visible_count
+                        && self.visible_count < self.results.len()
+                    {
+                        self.visible_count = (self.visible_count + 20).min(self.results.len());
+                    }
                     return self.scroll_to_selected();
                 }
             }
@@ -186,6 +196,7 @@ impl Launcher {
                 }
             }
             Message::Hide => {
+                self.visible_count = 20;
                 self.is_visible = false;
                 self.shown_at = None;
                 self.query.clear();
@@ -209,6 +220,7 @@ impl Launcher {
                 }
             }
             Message::Show => {
+                self.visible_count = 20;
                 self.is_visible = true;
                 self.shown_at = Some(std::time::Instant::now());
                 self.query.clear();
@@ -315,6 +327,22 @@ impl Launcher {
                 self.filter_mode = self.filter_mode.next();
                 self.update_results();
             }
+            Message::LoadMore => {
+                let total = self.results.len();
+                if self.visible_count < total {
+                    self.visible_count = (self.visible_count + 20).min(total);
+                }
+            }
+            Message::Scrolled(viewport) => {
+                let offset = viewport.absolute_offset().y;
+                let content_height = self.results.len().min(self.visible_count) as f32 * 70.0;
+                let scrollable_height = CONFIG.window.height - 88.0 - 50.0 - 32.0;
+                let near_bottom = offset + scrollable_height >= content_height - 140.0;
+
+                if near_bottom && self.visible_count < self.results.len() {
+                    self.visible_count = (self.visible_count + 20).min(self.results.len());
+                }
+            }
             Message::Ignored => {}
         }
         iced::Task::none()
@@ -326,8 +354,6 @@ impl Launcher {
     }
 
     fn scroll_to_selected(&self) -> Task<Message> {
-        // Window 500px - search input (~80px) - padding(~40px) = ~380px visible
-        // 380px / 70px per item ~= 5 visible items
         const ITEM_HEIGHT: f32 = 70.0;
         const PADDING_TOP: f32 = 16.0;
         const INPUT_AREA: f32 = 88.0;
@@ -340,20 +366,18 @@ impl Launcher {
         }
 
         let visible_items = (scrollable_height / ITEM_HEIGHT).floor() as usize;
-        let total_results = self.results.len();
+        let rendered_count = self.visible_count.min(self.results.len());
         let scroll_y = if self.selected < visible_items {
             0.0
-        } else if self.selected < visible_items.saturating_sub(2) {
-            0.0
-        } else if self.selected > total_results.saturating_sub(visible_items.saturating_sub(2)) {
-            (total_results as f32 * ITEM_HEIGHT - scrollable_height).max(0.0)
+        } else if self.selected > rendered_count.saturating_sub(visible_items.saturating_sub(2)) {
+            (rendered_count as f32 * ITEM_HEIGHT - scrollable_height).max(0.0)
         } else {
             let target_position =
                 (self.selected as f32 * ITEM_HEIGHT) - (scrollable_height * 0.25).max(40.0);
             target_position.max(0.0)
         };
 
-        let max_scroll = (total_results as f32 * ITEM_HEIGHT - scrollable_height).max(0.0);
+        let max_scroll = (rendered_count as f32 * ITEM_HEIGHT - scrollable_height).max(0.0);
         let final_scroll_y = scroll_y.min(max_scroll);
 
         operation::scroll_to(
@@ -366,6 +390,7 @@ impl Launcher {
     }
 
     fn update_results(&mut self) {
+        self.visible_count = 20;
         self.calc_result = None;
 
         if self.mode == InputMode::Command {
@@ -459,7 +484,9 @@ impl Launcher {
                         return;
                     }
                 }
-                self.results = self.search_engine.search_filtered(&self.query, &self.filter_mode);
+                self.results = self
+                    .search_engine
+                    .search_filtered(&self.query, &self.filter_mode);
             }
         }
         self.selected = 0;
@@ -499,10 +526,22 @@ impl Launcher {
 
         let filters = [
             (FilterMode::All, "All", "assets/icons/utility/grid.svg"),
-            (FilterMode::Applications, "Apps", "assets/icons/utility/apps.svg"),
+            (
+                FilterMode::Applications,
+                "Apps",
+                "assets/icons/utility/apps.svg",
+            ),
             (FilterMode::Files, "Files", "assets/icons/utility/files.svg"),
-            (FilterMode::Folders, "Folders", "assets/icons/utility/Folder.svg"),
-            (FilterMode::Shortcuts, "Shortcuts", "assets/icons/utility/lighting.svg"),
+            (
+                FilterMode::Folders,
+                "Folders",
+                "assets/icons/utility/Folder.svg",
+            ),
+            (
+                FilterMode::Shortcuts,
+                "Shortcuts",
+                "assets/icons/utility/lighting.svg",
+            ),
             (FilterMode::Web, "Web", "assets/icons/utility/globe.svg"),
         ];
 
@@ -528,10 +567,9 @@ impl Launcher {
                     ..Default::default()
                 });
 
-            filter_bar = filter_bar.push(
-                mouse_area(chip).on_press(Message::SetFilter(mode.clone()))
-            )
-        };
+            filter_bar =
+                filter_bar.push(mouse_area(chip).on_press(Message::SetFilter(mode.clone())))
+        }
 
         let mode_badge: Element<_> = if let Some(label) = input_label {
             container(text(label).size(14).style(|_| text::Style {
@@ -553,13 +591,13 @@ impl Launcher {
             text("").into()
         };
 
-        let results_list: Element<_> = if self.results.is_empty() {
-            text("No results").size(16).into()
+        let results_list = if self.results.is_empty() {
+            column![text("No results").size(16)]
         } else {
             self.results
                 .iter()
                 .enumerate()
-                .take(20)
+                .take(self.visible_count)
                 .fold(Column::new().spacing(4), |col, (i, result)| {
                     let is_selected = i == self.selected;
 
@@ -659,11 +697,45 @@ impl Launcher {
 
                     col.push(clickable_item)
                 })
-                .into()
         };
 
-        let body = scrollable(results_list)
+        let remaining = self.results.len().saturating_sub(self.visible_count);
+        let results_column = if remaining > 0 {
+            let load_more_row = container(
+                mouse_area(
+                    container(
+                        text(format!("Show {} more", remaining.min(20)))
+                            .size(13)
+                            .style(|_| text::Style {
+                                color: Some(Color::from_rgb(0.45, 0.65, 0.95)),
+                            }),
+                    )
+                    .padding([8, 16])
+                    .style(|_| container::Style {
+                        background: Some(iced::Background::Color(Color::from_rgba(
+                            0.15, 0.25, 0.55, 0.3,
+                        ))),
+                        border: iced::Border {
+                            radius: 8.0.into(),
+                            width: 0.5,
+                            color: Color::from_rgba(0.3, 0.5, 0.85, 0.4),
+                        },
+                        ..Default::default()
+                    }),
+                )
+                .on_press(Message::LoadMore),
+            )
+            .width(Length::Fill)
+            .center_x(Length::Fill)
+            .padding([4, 0]);
+            results_list.push(load_more_row)
+        } else {
+            results_list
+        };
+
+        let body = scrollable(results_column)
             .id(SCROLLABLE_ID.clone())
+            .on_scroll(Message::Scrolled)
             .spacing(4)
             .height(Length::Fill);
 
@@ -732,9 +804,11 @@ impl Launcher {
                 Key::Named(keyboard::key::Named::Tab) => Message::Tab,
                 Key::Character(ref c) if c.as_str() == "c" && modifiers.control() => {
                     Message::CopySelected
-                },
+                }
                 Key::Named(keyboard::key::Named::F1) => Message::SetFilter(FilterMode::All),
-                Key::Named(keyboard::key::Named::F2) => Message::SetFilter(FilterMode::Applications),
+                Key::Named(keyboard::key::Named::F2) => {
+                    Message::SetFilter(FilterMode::Applications)
+                }
                 Key::Named(keyboard::key::Named::F3) => Message::SetFilter(FilterMode::Files),
                 Key::Named(keyboard::key::Named::F4) => Message::SetFilter(FilterMode::Folders),
                 Key::Named(keyboard::key::Named::F5) => Message::SetFilter(FilterMode::Web),

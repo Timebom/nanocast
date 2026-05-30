@@ -7,7 +7,6 @@ pub struct DetectedShortcut {
     pub trigger: String,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct CommandSlot {
     pub name: String,
@@ -62,11 +61,17 @@ impl CommandModeState {
             _ => {
                 #[cfg(target_os = "windows")]
                 {
-                    Action::Custom("cmd".to_string(), vec!["/C".to_string(), "echo Do Nothing".to_string()])
+                    Action::Custom(
+                        "cmd".to_string(),
+                        vec!["/C".to_string(), "echo Do Nothing".to_string()],
+                    )
                 }
                 #[cfg(not(target_os = "windows"))]
                 {
-                    Action::Custom("sh".to_string(), vec!["-c".to_string(), "echo Do Nothing".to_string()])
+                    Action::Custom(
+                        "sh".to_string(),
+                        vec!["-c".to_string(), "echo Do Nothing".to_string()],
+                    )
                 }
             }
         }
@@ -88,7 +93,10 @@ impl CommandModeState {
     }
 
     pub fn active_value(&self) -> &str {
-        self.slots.get(self.active_slot).map(|s| s.value.as_str()).unwrap_or("")
+        self.slots
+            .get(self.active_slot)
+            .map(|s| s.value.as_str())
+            .unwrap_or("")
     }
 
     pub fn slot_hint(&self) -> String {
@@ -96,7 +104,7 @@ impl CommandModeState {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                if i ==  self.active_slot {
+                if i == self.active_slot {
                     format!("> {}: \"{}\"", s.name, s.value)
                 } else if s.value.is_empty() {
                     format!("[{}]", s.name)
@@ -121,7 +129,7 @@ fn extract_slots(template: &str) -> Vec<CommandSlot> {
                 seen.insert(name.to_string());
                 slots.push(CommandSlot {
                     name: name.to_string(),
-                    value: String::new()
+                    value: String::new(),
                 });
             }
             remaining = &remaining[end + 1..];
@@ -133,7 +141,7 @@ fn extract_slots(template: &str) -> Vec<CommandSlot> {
     if slots.is_empty() {
         slots.push(CommandSlot {
             name: "query".to_string(),
-            value: String::new()
+            value: String::new(),
         });
     }
     slots
@@ -164,7 +172,7 @@ impl ShortcutEngine {
                 return Some(DetectedShortcut {
                     action,
                     name: sc.name.to_string(),
-                    trigger: sc.trigger.to_string()
+                    trigger: sc.trigger.to_string(),
                 });
             }
         }
@@ -237,9 +245,7 @@ impl ShortcutEngine {
 
     fn create_action(&self, sc: &crate::config::ShortcutConfig, remaining: &str) -> Action {
         match sc.action_type.as_str() {
-            "calculator" => {
-                Action::RunCommand(format!("echo 'Calculate: {}'", remaining))
-            }
+            "calculator" => Action::RunCommand(format!("echo 'Calculate: {}'", remaining)),
 
             "open_url" | "web_search" => {
                 let url = if let Some(cmd) = &sc.command {
@@ -251,7 +257,10 @@ impl ShortcutEngine {
                         cmd.clone()
                     }
                 } else {
-                    format!("https://google.com/search?q={}", urlencoding::encode(remaining))
+                    format!(
+                        "https://google.com/search?q={}",
+                        urlencoding::encode(remaining)
+                    )
                 };
                 Action::OpenUrl(url)
             }
@@ -270,13 +279,21 @@ impl ShortcutEngine {
             }
 
             _ => {
-                #[cfg(target_os = "windows")] {
-                    return Action::Custom("cmd".to_string(), vec!["/C".to_string(), "echo Do Nothing".to_string()])
+                #[cfg(target_os = "windows")]
+                {
+                    return Action::Custom(
+                        "cmd".to_string(),
+                        vec!["/C".to_string(), "echo Do Nothing".to_string()],
+                    );
                 }
-                #[cfg(not(target_os = "windows"))] {
-                    Action::Custom("sh".to_string(), vec!["-c".to_string(), "echo Do Nothing".to_string()])
+                #[cfg(not(target_os = "windows"))]
+                {
+                    Action::Custom(
+                        "sh".to_string(),
+                        vec!["-c".to_string(), "echo Do Nothing".to_string()],
+                    )
                 }
-            },
+            }
         }
     }
 

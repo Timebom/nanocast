@@ -1,4 +1,4 @@
-use crate::config::{Config};
+use crate::config::Config;
 use crate::models::{ItemType, LauncherItem};
 use anyhow::Result;
 use shellexpand::tilde;

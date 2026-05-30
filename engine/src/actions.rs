@@ -1,9 +1,9 @@
 use crate::models::{ItemType, LauncherItem};
 use anyhow::Result;
-use std::process::Command;
-use urlencoding;
 use arboard::Clipboard;
 use evalexpr::*;
+use std::process::Command;
+use urlencoding;
 
 #[derive(Debug, Clone)]
 pub enum Action {
@@ -30,7 +30,10 @@ impl ActionHandler {
                 if let Some(path) = &item.path {
                     Action::LaunchApp(path.clone())
                 } else {
-                    Action::OpenUrl(format!("https://www.google.com/search?q={}", urlencoding::encode(&item.title)))
+                    Action::OpenUrl(format!(
+                        "https://www.google.com/search?q={}",
+                        urlencoding::encode(&item.title)
+                    ))
                 }
             }
 
@@ -90,9 +93,7 @@ impl ActionHandler {
                     };
                     let args: Vec<String> = parts.map(|s| s.to_string()).collect();
 
-                    Command::new(&program)
-                        .args(&args)
-                        .spawn()?;
+                    Command::new(&program).args(&args).spawn()?;
                 }
                 #[cfg(target_os = "windows")]
                 {
@@ -109,24 +110,15 @@ impl ActionHandler {
             Action::RunCommand(cmd) => {
                 #[cfg(target_os = "macos")]
                 {
-                    Command::new("sh")
-                        .arg("-c")
-                        .arg(&cmd)
-                        .spawn()?;
+                    Command::new("sh").arg("-c").arg(&cmd).spawn()?;
                 }
                 #[cfg(target_os = "linux")]
                 {
-                    Command::new("sh")
-                        .arg("-c")
-                        .arg(&cmd)
-                        .spawn()?;
+                    Command::new("sh").arg("-c").arg(&cmd).spawn()?;
                 }
                 #[cfg(target_os = "windows")]
                 {
-                    Command::new("cmd")
-                        .arg("/C")
-                        .arg(&cmd)
-                        .spawn()?;
+                    Command::new("cmd").arg("/C").arg(&cmd).spawn()?;
                 }
                 Ok(())
             }
@@ -139,8 +131,11 @@ impl ActionHandler {
             Action::CopyToClipboard(text) => {
                 let value = text.clone();
                 std::thread::spawn(move || {
-                    if let Ok(mut clipboard) = Clipboard::new().map_err(|e| anyhow::anyhow!("Failed to open clipboard: {}", e)) {
-                        let _ = clipboard.set_text(&value)
+                    if let Ok(mut clipboard) = Clipboard::new()
+                        .map_err(|e| anyhow::anyhow!("Failed to open clipboard: {}", e))
+                    {
+                        let _ = clipboard
+                            .set_text(&value)
                             .map_err(|e| anyhow::anyhow!("Failed to write to clipboard: {}", e));
                         std::thread::sleep(std::time::Duration::from_millis(200));
                     }
@@ -160,7 +155,10 @@ impl ActionHandler {
         Self::perform_action(action)
     }
 
-    pub fn execute_item_or_shortcut(item: &LauncherItem, shortcut_action: Option<Action>) -> Result<()> {
+    pub fn execute_item_or_shortcut(
+        item: &LauncherItem,
+        shortcut_action: Option<Action>,
+    ) -> Result<()> {
         if let Some(action) = shortcut_action {
             Self::execute_shortcut(action)
         } else {
@@ -262,7 +260,7 @@ pub fn create_special_item(query: &str) -> Option<LauncherItem> {
             path: Some(query.to_string()),
             icon_path: None,
             item_type: ItemType::Url,
-            tags: vec!["web".into()]
+            tags: vec!["web".into()],
         });
     }
 
@@ -277,7 +275,7 @@ pub fn create_special_item(query: &str) -> Option<LauncherItem> {
                 path: Some(payload),
                 icon_path: None,
                 item_type: ItemType::Command,
-                tags: vec!["calc".into(), "calculator".into()]
+                tags: vec!["calc".into(), "calculator".into()],
             });
         }
         return Some(LauncherItem {
@@ -287,7 +285,7 @@ pub fn create_special_item(query: &str) -> Option<LauncherItem> {
             path: None,
             icon_path: None,
             item_type: ItemType::Command,
-            tags: vec!["calc".into()]
+            tags: vec!["calc".into()],
         });
     }
 
