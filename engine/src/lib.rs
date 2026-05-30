@@ -7,7 +7,7 @@ pub mod search;
 pub mod shortcuts;
 
 pub use actions::{Action, ActionHandler, CalculatorEngine, create_special_item};
-pub use config::{Config, HotkeyConfig, IndexConfig, PLATFORM, Platform, WindowConfig};
+pub use config::{Config, HotkeyConfig, IndexConfig, WindowConfig};
 pub use index::IndexBuilder;
 pub use models::*;
 pub use search::SearchEngine;

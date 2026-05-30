@@ -3,28 +3,6 @@ use dirs;
 use serde::{Deserialize, Serialize};
 use toml;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Platform {
-    MacOS,
-    Linux,
-    Windows,
-}
-
-impl Platform {
-    pub const fn current() -> Self {
-        #[cfg(target_os = "macos")]
-        return Platform::MacOS;
-        #[cfg(target_os = "linux")]
-        return Platform::Linux;
-        #[cfg(target_os = "windows")]
-        return Platform::Windows;
-        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-        return Platform::Linux;
-    }
-}
-
-pub const PLATFORM: Platform = Platform::current();
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub max_results: usize,
@@ -60,43 +38,24 @@ impl Default for IndexConfig {
             index_applications: true,
             index_files: true,
             index_folders: false,
-            applications_paths: match PLATFORM {
-                Platform::MacOS => vec![
-                    "/Applications".to_string(),
-                    "~/Applications".to_string(),
-                    "/System/Applications".to_string(),
-                    "/System/Library/CoreServices".to_string(),
-                ],
-                Platform::Linux => vec![
-                    "/usr/share/applications".to_string(),
-                    "/usr/local/share/applications".to_string(),
-                    "~/.local/share/applications".to_string(),
-                ],
-                Platform::Windows => vec![
-                    // TODO: Windows Applications Source
-                ],
-            },
-            file_paths: match PLATFORM {
-                Platform::MacOS => vec![
-                    "~/Downloads".to_string(),
-                    "~/Documents".to_string(),
-                    "~/Desktop".to_string(),
-                    "~/Pictures".to_string(),
-                    "~/Movies".to_string(),
-                    "~/Music".to_string(),
-                ],
-                Platform::Linux => vec![
-                    "~/Downloads".to_string(),
-                    "~/Documents".to_string(),
-                    "~/Desktop".to_string(),
-                    "~/Pictures".to_string(),
-                    "~/Videos".to_string(),
-                    "~/Music".to_string(),
-                ],
-                Platform::Windows => vec![
-                    // TODO: Windows Files Source
-                ],
-            },
+            applications_paths: vec![
+                "/Applications".to_string(),
+                "~/Applications".to_string(),
+                "/System/Applications".to_string(),
+                "/System/Library/CoreServices".to_string(),
+                "/usr/share/applications".to_string(),
+                "/usr/local/share/applications".to_string(),
+                "~/.local/share/applications".to_string(),
+            ],
+            file_paths: vec![
+                "~/Downloads".to_string(),
+                "~/Documents".to_string(),
+                "~/Desktop".to_string(),
+                "~/Pictures".to_string(),
+                "~/Movies".to_string(),
+                "~/Videos".to_string(),
+                "~/Music".to_string(),
+            ],
             ignored_patterns: vec![
                 "/sys".to_string(),
                 "/tmp".to_string(),
@@ -120,10 +79,12 @@ pub struct HotkeyConfig {
 
 impl Default for HotkeyConfig {
     fn default() -> Self {
+        let is_macos = cfg!(target_os = "macos");
         Self {
-            modifiers: match PLATFORM {
-                Platform::MacOS => "Meta".to_string(),
-                _ => "Control".to_string(),
+            modifiers: if is_macos {
+                "Meta".to_string()
+            } else {
+                "Control".to_string()
             },
             key: "Space".to_string(),
         }

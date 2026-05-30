@@ -1,4 +1,4 @@
-use crate::config::{Config, PLATFORM, Platform};
+use crate::config::{Config};
 use crate::models::{ItemType, LauncherItem};
 use anyhow::Result;
 use shellexpand::tilde;
@@ -18,17 +18,17 @@ impl IndexBuilder {
         let mut items = Vec::new();
 
         // Applications
-        if self.config.index.index_applications {
-            match PLATFORM {
-                Platform::MacOS => {
-                    self.index_macos_applications(&mut items)?;
-                }
-                Platform::Linux => {
-                    self.index_linux_desktop_files(&mut items)?;
-                }
-                Platform::Windows => {
-                    // TODO: Windows Application support
-                }
+        #[cfg(target_os = "linux")]
+        {
+            if self.config.index.index_applications {
+                self.index_linux_desktop_files(&mut items)?;
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            if self.config.index.index_applications {
+                self.index_macos_applications(&mut items)?;
             }
         }
 
@@ -64,6 +64,7 @@ impl IndexBuilder {
         Ok(items)
     }
 
+    #[cfg(target_os = "linux")]
     fn index_linux_desktop_files(&self, items: &mut Vec<LauncherItem>) -> Result<()> {
         use freedesktop_file_parser::{EntryType, parse};
         use freedesktop_icons::lookup;
@@ -148,7 +149,7 @@ impl IndexBuilder {
             let expanded = tilde(dir).into_owned();
             let path = Path::new(&expanded);
             if !path.exists() {
-                return Ok(());
+                continue;
             }
 
             for entry in WalkDir::new(path)
