@@ -2,7 +2,7 @@ use engine::hotkey;
 use engine::shortcuts::CommandModeState;
 use engine::{
     Action, ActionHandler, CalculatorEngine, Config, IndexBuilder, LauncherItem, SearchEngine,
-    SearchResult, ShortcutEngine, create_special_item,
+    SearchResult, FilterMode, ShortcutEngine, create_special_item,
 };
 use iced::{
     Alignment, Color, Element, Length, Subscription, Task, Theme,
@@ -36,6 +36,8 @@ enum Message {
     WindowUnfocused,
     Tab,
     ClickSelect(usize),
+    SetFilter(FilterMode),
+    CycleFilter,
     Ignored,
 }
 
@@ -59,6 +61,7 @@ pub struct Launcher {
     mode: InputMode,
     command_state: Option<CommandModeState>,
     calc_result: Option<String>,
+    filter_mode: FilterMode,
 }
 
 impl Launcher {
@@ -92,6 +95,7 @@ impl Launcher {
             mode: InputMode::Normal,
             command_state: None,
             calc_result: None,
+            filter_mode: FilterMode::default(),
         };
         app.update_results();
         let init_task = window::oldest().map(Message::WindowIdFound);
@@ -185,6 +189,7 @@ impl Launcher {
                 self.is_visible = false;
                 self.shown_at = None;
                 self.query.clear();
+                self.filter_mode = FilterMode::default();
                 self.exit_command_mode();
                 self.update_results();
                 self.selected = 0;
@@ -207,6 +212,7 @@ impl Launcher {
                 self.is_visible = true;
                 self.shown_at = Some(std::time::Instant::now());
                 self.query.clear();
+                self.filter_mode = FilterMode::default();
                 self.exit_command_mode();
                 self.update_results();
                 self.selected = 0;
@@ -300,6 +306,14 @@ impl Launcher {
             }
             Message::ClickSelect(index) => {
                 self.selected = index.min(self.results.len().saturating_sub(1));
+            }
+            Message::SetFilter(mode) => {
+                self.filter_mode = mode;
+                self.update_results();
+            }
+            Message::CycleFilter => {
+                self.filter_mode = self.filter_mode.next();
+                self.update_results();
             }
             Message::Ignored => {}
         }
@@ -415,7 +429,7 @@ impl Launcher {
         } else {
             self.pending_shortcut = None;
             if self.query.trim().is_empty() {
-                self.results = self.search_engine.search("");
+                self.results = self.search_engine.search_filtered("", &self.filter_mode);
             } else if let Some(special) = create_special_item(&self.query) {
                 self.results = vec![SearchResult {
                     item: special,
@@ -445,7 +459,7 @@ impl Launcher {
                         return;
                     }
                 }
-                self.results = self.search_engine.search(&self.query);
+                self.results = self.search_engine.search_filtered(&self.query, &self.filter_mode);
             }
         }
         self.selected = 0;
@@ -480,6 +494,44 @@ impl Launcher {
                 background: iced::Background::Color(iced::Color::from_rgb(0.12, 0.12, 0.14)),
                 ..text_input::default(theme, status)
             });
+
+        let mut filter_bar = row![].spacing(6).align_y(Alignment::Center);
+
+        let filters = [
+            (FilterMode::All, "All", "assets/icons/utility/grid.svg"),
+            (FilterMode::Applications, "Apps", "assets/icons/utility/apps.svg"),
+            (FilterMode::Files, "Files", "assets/icons/utility/files.svg"),
+            (FilterMode::Folders, "Folders", "assets/icons/utility/Folder.svg"),
+            (FilterMode::Shortcuts, "Shortcuts", "assets/icons/utility/lighting.svg"),
+            (FilterMode::Web, "Web", "assets/icons/utility/globe.svg"),
+        ];
+
+        for (mode, label, _) in filters.iter() {
+            let is_active = self.filter_mode == *mode;
+            let chip = container(text(*label).size(12))
+                .padding([4, 10])
+                .style(move |_| container::Style {
+                    background: Some(iced::Background::Color(if is_active {
+                        Color::from_rgba(0.15, 0.25, 0.55, 1.0)
+                    } else {
+                        Color::from_rgba(0.12, 0.12, 0.14, 1.0)
+                    })),
+                    border: iced::Border {
+                        radius: 20.0.into(),
+                        width: 0.5,
+                        color: if is_active {
+                            Color::from_rgba(0.3, 0.5, 0.85, 1.0)
+                        } else {
+                            Color::from_rgba(1.0, 1.0, 1.0, 0.1)
+                        },
+                    },
+                    ..Default::default()
+                });
+
+            filter_bar = filter_bar.push(
+                mouse_area(chip).on_press(Message::SetFilter(mode.clone()))
+            )
+        };
 
         let mode_badge: Element<_> = if let Some(label) = input_label {
             container(text(label).size(14).style(|_| text::Style {
@@ -648,7 +700,7 @@ impl Launcher {
         .spacing(12);
 
         container(
-            column![input, body, footer]
+            column![input, filter_bar, body, footer]
                 .spacing(14)
                 .padding(16)
                 .width(Length::Fill),
@@ -680,7 +732,12 @@ impl Launcher {
                 Key::Named(keyboard::key::Named::Tab) => Message::Tab,
                 Key::Character(ref c) if c.as_str() == "c" && modifiers.control() => {
                     Message::CopySelected
-                }
+                },
+                Key::Named(keyboard::key::Named::F1) => Message::SetFilter(FilterMode::All),
+                Key::Named(keyboard::key::Named::F2) => Message::SetFilter(FilterMode::Applications),
+                Key::Named(keyboard::key::Named::F3) => Message::SetFilter(FilterMode::Files),
+                Key::Named(keyboard::key::Named::F4) => Message::SetFilter(FilterMode::Folders),
+                Key::Named(keyboard::key::Named::F5) => Message::SetFilter(FilterMode::Web),
                 _ => Message::Ignored,
             },
             _ => Message::Ignored,

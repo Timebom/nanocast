@@ -1,5 +1,6 @@
+use std::result;
 use std::sync::Arc;
-use crate::models::{LauncherItem, SearchResult};
+use crate::models::{LauncherItem, SearchResult, FilterMode, ItemType};
 use nucleo::{Nucleo, Config};
 use nucleo::pattern::{CaseMatching, Normalization};
 
@@ -60,6 +61,25 @@ impl SearchEngine {
                 score: 0.0 as f32,
             })
             .collect()
+    }
+
+    pub fn search_filtered(&mut self, query: &str, filter: &FilterMode) -> Vec<SearchResult> {
+        let mut results = self.search(query);
+
+        if *filter == FilterMode::All {
+            return results;
+        }
+
+        results.retain(|r| match filter {
+            FilterMode::All => true,
+            FilterMode::Applications => matches!(r.item.item_type, ItemType::Application),
+            FilterMode::Files => matches!(r.item.item_type, ItemType::File),
+            FilterMode::Folders => matches!(r.item.item_type, ItemType::Folder),
+            FilterMode::Shortcuts => r.item.id.starts_with("shortcut:"),
+            FilterMode::Web => matches!(r.item.item_type, ItemType::Url),
+        });
+
+        results
     }
 
     pub fn get_all_items(&self) -> &[LauncherItem] {

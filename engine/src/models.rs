@@ -41,3 +41,38 @@ pub struct SearchResult {
     pub item: LauncherItem,
     pub score: f32,
 }
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum FilterMode {
+    #[default]
+    All,
+    Applications,
+    Files,
+    Folders,
+    Shortcuts,
+    Web,
+}
+
+impl FilterMode {
+    pub fn next(&self) -> Self {
+        match self {
+            Self::All => Self::Applications,
+            Self::Applications => Self::Files,
+            Self::Files => Self::Folders,
+            Self::Folders => Self::Shortcuts,
+            Self::Shortcuts => Self::Web,
+            Self::Web => Self::All,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Applications => "Applications",
+            Self::Files => "Files",
+            Self::Folders => "Folders",
+            Self::Shortcuts => "Shortcuts",
+            Self::Web => "Web",
+        }
+    }
+}
