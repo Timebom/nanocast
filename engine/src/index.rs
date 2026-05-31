@@ -173,7 +173,8 @@ impl IndexBuilder {
                     let resources = p.join("Contents/Resources");
                     let full_icon_path = resources.join(icon_name);
                     if full_icon_path.exists() {
-                        Some(full_icon_path.to_string_lossy().to_string())
+                        // Some(full_icon_path.to_string_lossy().to_string())
+                        self.icns_to_png_cached(&full_icon_path.to_string_lossy())
                     } else {
                         None
                     }
@@ -234,6 +235,57 @@ impl IndexBuilder {
             }
             Err(_) => (None, None),
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn icns_to_png_cached(&self, icns_path: &str) -> Option<String> {
+        use std::fs;
+
+        // Cache dir: ~/.cache/nanocast/icons/
+        let cache_dir = dirs::cache_dir()?.join("nanocast/icons");
+        fs::create_dir_all(&cache_dir).ok()?;
+
+        // Use a hash of the source path as filename to avoid collisions
+        let hash = format!("{:x}", self.md5_of(icns_path));
+        let png_path = cache_dir.join(format!("{}.png", hash));
+
+        // Return cached version if already converted
+        if png_path.exists() {
+            return Some(png_path.to_string_lossy().to_string());
+        }
+
+        // Load and decode the .icns file
+        let file = fs::File::open(icns_path).ok()?;
+        let icon_family = icns::IconFamily::read(file).ok()?;
+
+        // Try to get the best available size (128x128 preferred, fallback to others)
+        let image = icon_family
+            .get_icon_with_type(icns::IconType::RGBA32_128x128)
+            .or_else(|_| icon_family.get_icon_with_type(icns::IconType::RGBA32_64x64))
+            .or_else(|_| icon_family.get_icon_with_type(icns::IconType::RGBA32_32x32))
+            .ok()?;
+
+        // Convert to PNG bytes and write to cache
+        let png_data = image.clone().into_data().to_vec(); // raw RGBA
+        let width = image.width(); // before moving
+        // Actually use the `image` crate to save properly:
+        let img_buf = image::RgbaImage::from_raw(
+            width as u32,
+            width as u32, // icns images are square
+            png_data,
+        )?;
+        img_buf.save(&png_path).ok()?;
+
+        Some(png_path.to_string_lossy().to_string())
+    }
+
+    // Simple path-based hash to avoid pulling in md5 crate
+    fn md5_of(&self, s: &str) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        s.hash(&mut h);
+        h.finish()
     }
 
     fn index_files(&self, base_path: &str, items: &mut Vec<LauncherItem>) -> Result<()> {
