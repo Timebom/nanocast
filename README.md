@@ -15,13 +15,14 @@ Built with ❤️ in Rust.
 
 - **Lightning fast** fuzzy search powered by `nucleo`
 - Global hotkey support (`Ctrl/Cmd + Space` by default)
-- Clean, modern UI with rounded corners
-- Keyboard navigation (`↑↓`, `Enter`, `Esc`, `Tab`)
+- Clean, modern UI with rounded corners and blur
+- Keyboard navigation (`↑↓`, `Enter`, `Esc`, `Tab`, `Ctrl+C`)
+- Filter results by **All / Applications / Files / Shortcuts**
 - Mouse support (click to select, double-click to launch, click outside to dismiss)
 - Supports **Linux `.desktop` files** and **macOS `.app`** bundles
-- Built-in calculator
-- Custom command shortcuts (command mode with slots)
-- Clipboard support
+- Built-in calculator with live preview
+- Custom command shortcuts with **command mode** (slot-based input via `> trigger`)
+- Clipboard support (copy paths/results with `Ctrl+C`)
 - Configurable via TOML
 - Starts hidden, low resource usage
 - Built with `iced` (Rust native UI)
@@ -43,7 +44,7 @@ Built with ❤️ in Rust.
 ```bash
 # Clone the repo
 git clone https://github.com/Timebom/nanocast.git
-cd nanocast/ui
+cd nanocast
 
 # Build and run
 cargo run --release
@@ -57,11 +58,13 @@ cargo run --release
 
 1. Run NanoCast (it runs in the background)
 2. Press **Ctrl** + **Space** (Linux) or **Cmd** + **Space** (macOS) to open
-3. Type to search applications or files
-4. Use arrow keys to navigate
-5. Press **Enter** to launch
+3. Type to search applications, files or commands
+4. Use arrow keys or mouse to navigate
+5. Press **Enter** to launch / **Ctrl+C** to copy
 6. Press **Esc** or click outside to close
-7. To quit: Type ```quit```, ```exit```, or ```kill``` and press Enter
+7. Use `F1`-`F3` to filter results
+8. Type `> trigger` for command mode with slots
+9. To quit: Type ```quit```, ```exit```, or ```kill``` and press Enter
 
 ## Configuration
 ### Configuration file is located at:
@@ -97,23 +100,8 @@ action_type = "open_url"
 command = "https://youtube.com/results?search_query={query}"
 ```
 
-## Building & Development
-
-```bash
-# Run in development
-cargo run
-
-# Build optimized release
-cargo build --release
-```
-
 ## Roadmap
 
-- [x] Better icon support (system icon themes on Linux)
-- [x] Calculator mode
-- [x] Custom shortcuts with command mode
-- [x] Mouse support (click/double-click)
-- [x] Quit command
 - [ ] Clipboard history
 - [ ] Window blur effects (macOS vibrancy + Linux)
 - [ ] Plugin system
